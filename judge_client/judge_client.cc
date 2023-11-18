@@ -139,6 +139,7 @@ static char lang_ext[19][8] = {
     "cc",			//16
     "py",			//17
 	"go",			//18
+	"py",           //19
 };
 
 	// static char buf[BUFFER_SIZE];
@@ -262,7 +263,7 @@ static char lang_ext[19][8] = {
 		} else if (lang == 12) { //scheme guile
 			for (i = 0; i==0||LANG_SV[i]; i++)
 				call_counter[LANG_SV[i]] = HOJ_MAX_LIMIT;
-		} else if (lang == 15 || lang == 17) { //python3 or python3.7
+		} else if (lang == 15 || lang == 17 || lang == 19 ) { //python3 or python3.7 or python3.12
 			for (i = 0; i==0||LANG_PY3[i]; i++)
 				call_counter[LANG_PY3[i]] = HOJ_MAX_LIMIT;
 		} else if (lang == 18 ) { //go
@@ -307,9 +308,7 @@ static char lang_ext[19][8] = {
 	void read_int(char * buf, const char * key, int * value) {
 		char buf2[BUFFER_SIZE];
 		if(read_buf(buf, key, buf2)) sscanf(buf2, "%d", value);
-
 	}
-
 
 // read the configue file
 void init_mysql_conf() {
@@ -340,7 +339,6 @@ void init_mysql_conf() {
 			read_int(buf, "OJ_OI_MODE", &oi_mode);
 			read_int(buf, "OJ_SHM_RUN", &shm_run);
 			read_int(buf, "OJ_USE_MAX_TIME", &use_max_time);
-
 		}
 	}
 }
@@ -409,7 +407,7 @@ const char * getFileNameFromPath(const char * path) {
  	FILE *fin_;
  	fin_ = fopen("data.in", "r+");
  	char caracter;
- 	int limi=512;
+ 	int limi = 512;
  	while (feof(fin_) == 0 && limi--){
  		caracter = fgetc(fin_);
  		fprintf(out, "%c", caracter);
@@ -421,21 +419,23 @@ const char * getFileNameFromPath(const char * path) {
  	fprintf(out, "Respuesta Correcta:\n");
 
 	
-		limi=900;
-		while (feof(f1) == 0 && limi--){
+		limi = 100;
+		while (feof(f1) == 0 && limi--) {
 			caracter = fgetc(f1);
 			fprintf(out, "%c", caracter);
 		}
+
 		if(limi < 0 )fprintf(out, "\n...\n");
 
 		fprintf(out, "\n-----------------\n");
 		fprintf(out, "Tu respuesta:\n");
 	
-		limi=900;
+		limi = 1000;
 		while (feof(f2) == 0 && limi--){
 			caracter = fgetc(f2);
 			fprintf(out, "%c", caracter);
 		}
+
 		if(limi < 0 )fprintf(out,"%s" ,"\n...\n");
 		fprintf(out, "\n=================\n");
 		fprintf(out, "\nEsta modulo esta en modo beta. No se confie \n");
@@ -781,11 +781,12 @@ int compile(int lang, char *work_dir) {
 	const char * CP_CS[] = { "gmcs", "-warn:0", "Main.cs", NULL };
 	const char * CP_OC[] = { "gcc", "-o", "Main", "Main.m",	"-fconstant-string-class=NSConstantString", "-I","/usr/include/GNUstep/", "-L", "/usr/lib/GNUstep/Libraries/","-lobjc", "-lgnustep-base", NULL };
 	const char * CP_BS[] = { "fbc", "Main.bas", NULL };
-	const char * CP_CLANG[]={"clang", "Main.c", "-o", "Main", "-fno-asm", "-Wall", "-lm", "--static", "-std=c99", "-DONLINE_JUDGE", NULL };
-	const char * CP_CLANG_CPP[]={"clang++", "Main.cc", "-o", "Main", "-fno-asm", "-Wall", "-lm", "--static", "-std=c++0x",  "-DONLINE_JUDGE", NULL };
-	const char * CP_X11[] = { "g++", "Main.cc", "-o", "Main", "-fno-asm", "-Wall","-lm", "--static", "-std=c++11", "-DONLINE_JUDGE", NULL };
-    const char * CP_GO[]   = {"go", "build", "-o", "Main", "Main.go", NULL};
-    const char * CP_PY[]   = {"/usr/bin/python3.7", "-m", "pyflakes" ,"Main.py", NULL};
+	const char * CP_CLANG[] = {"clang", "Main.c", "-o", "Main", "-fno-asm", "-Wall", "-lm", "--static", "-std=c99", "-DONLINE_JUDGE", NULL };
+	const char * CP_CLANG_CPP[] = {"clang++", "Main.cc", "-o", "Main", "-fno-asm", "-Wall", "-lm", "--static", "-std=c++0x",  "-DONLINE_JUDGE", NULL };
+	const char * CP_X11[]    = { "g++", "Main.cc", "-o", "Main", "-fno-asm", "-Wall","-lm", "--static", "-std=c++11", "-DONLINE_JUDGE", NULL };
+    const char * CP_GO[]     = {"go", "build", "-o", "Main", "Main.go", NULL};
+    const char * CP_PY[]     = {"/usr/bin/python3.7", "-m", "pyflakes" ,"Main.py", NULL};
+    const char * CP_PY12[]   = {"/usr/bin/python3.12", "-m", "pyflakes" ,"Main.py", NULL};
 	
 	char javac_buf[7][16];
 	char *CP_J[7];
@@ -877,6 +878,9 @@ int compile(int lang, char *work_dir) {
 			case 18:
 			execvp(CP_GO[0], (char *const *)CP_GO);
 			break;
+			case 19:
+			execvp(CP_PY12[0], (char *const *)CP_PY12);
+			break;			
 			default:
 			printf("nothing to do!\n");
 		}
@@ -1283,7 +1287,7 @@ void run_solution(int & lang, char * work_dir, int & time_lmt, int & usedtime,in
 	// trace me
 	ptrace(PTRACE_TRACEME, 0, NULL, NULL);
 	// run me
-	if (lang != 3 && lang != 6 && lang != 15 && lang != 17)
+	if (lang != 3 && lang != 6 && lang != 15 && lang != 17 && lang != 19)
 		chroot(work_dir);
 
 	while (setgid(1536) != 0)
@@ -1373,6 +1377,9 @@ switch(lang) {
 	case 17: //PYTHON3.7
 	execl("/usr/bin/python3.7", "/usr/bin/python3.7", "Main.py", (char *) NULL);
 	break;
+	case 19: //PYTHON3.12
+	execl("/usr/bin/python3.12", "/usr/bin/python3.12", "Main.py", (char *) NULL);
+	break;	
 
 }
 exit(0);
@@ -1468,8 +1475,8 @@ int special_judge(char* oj_home, int problem_id, char *infile, char *outfile, ch
 			printf("spj2=%d\n", ret);
 	}
 	return ret;
-
 }
+
 void judge_solution(int & ACflg, int & usedtime, int time_lmt, int isspj,
 	int p_id, char * infile, char * outfile, char * userfile, int & PEflg,
 	int lang, char * work_dir, int & topmemory, int mem_lmt,
@@ -1528,6 +1535,7 @@ int get_page_fault_mem(struct rusage & ruse, pid_t & pidApp) {
 	}
 	return m_minflt;
 }
+
 void print_runtimeerror(char * err) {
 	FILE *ferr = fopen("error.out", "a+");
 	fprintf(ferr, "Runtime Error:%s\n", err);
@@ -1687,6 +1695,7 @@ void watch_solution(pid_t pidApp, char * infile, int & ACflg, int isspj,
 	usedtime += (ruse.ru_stime.tv_sec * 1000 + ruse.ru_stime.tv_usec / 1000) * cpu_compensation;
 
 }
+
 void clean_workdir(char *work_dir){
 	umount(work_dir);
 	if (DEBUG){
@@ -1720,7 +1729,6 @@ void init_parameters(int argc, char ** argv, int & solution_id, int & runner_id)
     solution_id = atoi(argv[1]);
     runner_id = atoi(argv[2]);
 }
-
 
 int get_sim(int solution_id, int lang, int pid, int &sim_s_id) {
 
@@ -1772,6 +1780,7 @@ void mk_shm_workdir(char * work_dir) {
 	execute_cmd("/bin/ln -s %s/data %s", oj_home, shm_path);
 
 }
+
 int count_in_files(char * dirpath) {
 	const char * cmd = "ls -l %s/*.in|wc -l";
 	int ret = 0;
@@ -1801,8 +1810,6 @@ void print_call_array() {
     printf("0};\n");
 
 }
-
-
 
 int main(int argc, char** argv) {
 
