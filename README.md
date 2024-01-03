@@ -1,18 +1,20 @@
-# Patito Kernel is fork of Hustoj 
+# Patito Kernel is fork of Hustoj
 Judge, Judge_client and sim kernel of Patito Judge
 
-## Languages supports  
+## Languages supports
 - Java
 - C
 - C++
 - C++x11
 - Python2.7
 - Python3
-- Python3.7  
+- Python3.7
+- Python3.12
+
 
 ## Dependencies of compile
 ```console
-apt install -y build-essential make flex g++ default-libmysqlclient-dev libmysql++-dev 
+apt install -y build-essential make flex g++ default-libmysqlclient-dev libmysql++-dev
 ```
 
 ## Install
@@ -20,7 +22,7 @@ apt install -y build-essential make flex g++ default-libmysqlclient-dev libmysql
 chmod +x install.sh
 ./install.sh
 ```
-## Executing 
+## Executing
 ```console
 /etc/init.d/judged start
 ```
@@ -36,7 +38,7 @@ chmod +x install.sh
 
 
 
-## Debug Mode specific runID 
+## Debug Mode specific runID
 
 ```console
 Usage:judge_client solution_id runner_id.
