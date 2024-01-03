@@ -916,7 +916,7 @@ int compile(int lang, char *work_dir)
     const char *CP_X11[] = {"g++", "Main.cc", "-o", "Main", "-fno-asm", "-Wall", "-lm", "--static", "-std=c++11", "-DONLINE_JUDGE", NULL};
     const char *CP_GO[] = {"go", "build", "-o", "Main", "Main.go", NULL};
     const char *CP_PY[] = {"/usr/bin/python3.7", "-m", "pyflakes", "Main.py", NULL};
-    const char *CP_PY12[] = {"/usr/bin/python3.12", "-m", "pyflakes", "Main.py", NULL};
+    const char *CP_PY12[] = {"/usr/bin/python3.12", "Main.py", NULL};
 
     char javac_buf[7][16];
     char *CP_J[7];
