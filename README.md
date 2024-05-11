@@ -14,7 +14,7 @@ Judge, Judge_client and sim kernel of Patito Judge
 
 ## Dependencies of compile
 ```console
-apt install -y build-essential make flex g++ default-libmysqlclient-dev libmysql++-dev
+apt install -y build-essential make flex g++ default-libmysqlclient-dev libmysql++-dev dos2unix
 ```
 
 ## Install
