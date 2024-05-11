@@ -119,7 +119,7 @@ static double cpu_compensation = 1.0;
 #define ZOJ_COM
 MYSQL *conn;
 
-static char lang_ext[20][8] = {
+static char lang_ext[21][8] = {
     "c",    // 0
     "cc",   // 1
     "pas",  // 2
@@ -140,6 +140,7 @@ static char lang_ext[20][8] = {
     "py",   // 17
     "go",   // 18
     "py",   // 19
+    "psc",  // 20
 };
 
 // static char buf[BUFFER_SIZE];
@@ -240,7 +241,7 @@ void init_syscalls_limits(int lang)
             call_counter[i] = 0;
         }
     }
-    else if (lang <= 1 || lang == 13 || lang == 14 || lang == 16)
+    else if (lang <= 1 || lang == 13 || lang == 14 || lang == 16 || lang == 20)
     { // C & C++
         for (i = 0; i == 0 || LANG_CV[i]; i++)
             call_counter[LANG_CV[i]] = HOJ_MAX_LIMIT;
@@ -731,8 +732,7 @@ void _addceinfo_mysql(int solution_id)
     char sql[(1 << 16)], *end;
     char ceinfo[(1 << 16)], *cend;
     FILE *fp = fopen("ce.txt", "r");
-    snprintf(sql, (1 << 16) - 1, "DELETE FROM compileinfo WHERE solution_id=%d",
-             solution_id);
+    snprintf(sql, (1 << 16) - 1, "DELETE FROM compileinfo WHERE solution_id=%d", solution_id);
     mysql_real_query(conn, sql, strlen(sql));
     cend = ceinfo;
     while (fgets(cend, 1024, fp))
@@ -846,12 +846,12 @@ void _update_user_mysql(char *user_id)
 {
     char sql[BUFFER_SIZE];
     sprintf(sql,
-            "UPDATE `users` SET `solved`=(SELECT count(DISTINCT `problem_id`) FROM `solution` WHERE `user_id`=\'%s\' AND `result`=\'4\') WHERE `user_id`=\'%s\'",
+            "UPDATE `user_activity` SET `solved`=(SELECT count(DISTINCT `problem_id`) FROM `solution` WHERE `user_id`=\'%s\' AND `result`=\'4\') WHERE `user_id`=\'%s\'",
             user_id, user_id);
     if (mysql_real_query(conn, sql, strlen(sql)))
         write_log(mysql_error(conn));
     sprintf(sql,
-            "UPDATE `users` SET `submit`=(SELECT count(*) FROM `solution` WHERE `user_id`=\'%s\') WHERE `user_id`=\'%s\'",
+            "UPDATE `user_activity` SET `submit`=(SELECT count(*) FROM `solution` WHERE `user_id`=\'%s\') WHERE `user_id`=\'%s\'",
             user_id, user_id);
     if (mysql_real_query(conn, sql, strlen(sql)))
         write_log(mysql_error(conn));
@@ -916,8 +916,11 @@ int compile(int lang, char *work_dir)
     const char *CP_X11[] = {"g++", "Main.cc", "-o", "Main", "-fno-asm", "-Wall", "-lm", "--static", "-std=c++11", "-DONLINE_JUDGE", NULL};
     const char *CP_GO[] = {"go", "build", "-o", "Main", "Main.go", NULL};
     const char *CP_PY[] = {"/usr/bin/python3.7", "-m", "pyflakes", "Main.py", NULL};
-    const char *CP_PY12[] = {"/usr/bin/python3.12", "-c", "import py_compile; py_compile.compile(r'Main.py')", NULL };
-
+    const char *CP_PY12[] = {"/usr/bin/python3.12", "-c", "import py_compile; py_compile.compile(r'Main.py')", NULL};
+    const char *CP_CPP20[] = {"/bin/sh", "-c", 
+        "pwd && ls -lha && chown judge:judge Main.psc && /usr/bin/dos2unix -b Main.psc  && /usr/bin/pseint Main.psc --draw Main.psd --fixwincharset --norun pseint.txt && /usr/bin/psexport --lang=cpp Main.psd Main.cc && g++ Main.cc -o Main -fno-asm -Wall -lm --static -DONLINE_JUDGE",
+        NULL
+    };
     char javac_buf[7][16];
     char *CP_J[7];
 
@@ -971,6 +974,7 @@ int compile(int lang, char *work_dir)
             sleep(1);
         while (setresuid(1536, 1536, 1536) != 0)
             sleep(1);
+        printf("lllllaaaaannnng");
         switch (lang)
         {
         case 0:
@@ -1021,6 +1025,11 @@ int compile(int lang, char *work_dir)
         case 19:
             execvp(CP_PY12[0], (char *const *)CP_PY12);
             break;
+        case 20:
+            printf("+++++++++++++++++++++++++++++");
+            execvp(CP_CPP20[0], (char *const *)CP_CPP20);
+            printf("%s", (char *const *)CP_CPP20[0]);
+            break;
         default:
             printf("nothing to do!\n");
         }
@@ -1068,12 +1077,10 @@ int get_proc_status(int pid, const char *mark)
 int init_mysql_conn()
 {
     conn = mysql_init(NULL);
-    // mysql_real_connect(conn,host_name,user_name,password,db_name,port_number,0,0);
     const char timeout = 30;
     mysql_options(conn, MYSQL_OPT_CONNECT_TIMEOUT, &timeout);
 
-    if (!mysql_real_connect(conn, host_name, user_name, password, db_name,
-                            port_number, 0, 0))
+    if (!mysql_real_connect(conn, host_name, user_name, password, db_name, port_number, 0, 0))
     {
         write_log("%s", mysql_error(conn));
         return 0;
@@ -1114,34 +1121,6 @@ void get_solution(int solution_id, char *work_dir, int lang)
     _get_solution_mysql(solution_id, work_dir, lang);
 }
 
-void _get_custominput_mysql(int solution_id, char *work_dir)
-{
-    char sql[BUFFER_SIZE], src_pth[BUFFER_SIZE];
-    // get the source code
-    MYSQL_RES *res;
-    MYSQL_ROW row;
-    sprintf(sql, "SELECT input_text FROM custominput WHERE solution_id=%d",
-            solution_id);
-    mysql_real_query(conn, sql, strlen(sql));
-    res = mysql_store_result(conn);
-    row = mysql_fetch_row(res);
-    if (row != NULL)
-    {
-
-        // create the src file
-        sprintf(src_pth, "data.in");
-        FILE *fp_src = fopen(src_pth, "w");
-        fprintf(fp_src, "%s", row[0]);
-        fclose(fp_src);
-    }
-    mysql_free_result(res);
-}
-
-void get_custominput(int solution_id, char *work_dir)
-{
-    _get_custominput_mysql(solution_id, work_dir);
-}
-
 void _get_solution_info_mysql(int solution_id, int &p_id, char *user_id, int &lang)
 {
 
@@ -1149,10 +1128,7 @@ void _get_solution_info_mysql(int solution_id, int &p_id, char *user_id, int &la
     MYSQL_ROW row;
 
     char sql[BUFFER_SIZE];
-    // get the problem id and user id from Table:solution
-    sprintf(sql,
-            "SELECT problem_id, user_id, language FROM solution where solution_id=%d",
-            solution_id);
+    sprintf(sql, "SELECT problem_id, user_id, language FROM solution where solution_id=%d", solution_id);
     // printf("%s\n",sql);
     mysql_real_query(conn, sql, strlen(sql));
     res = mysql_store_result(conn);
@@ -1505,6 +1481,7 @@ void run_solution(int &lang, char *work_dir, int &time_lmt, int &usedtime, int &
     case 13:
     case 14:
     case 18:
+    case 20:
     case 16:
         execl("./Main", "./Main", (char *)NULL);
         break;
@@ -2168,7 +2145,7 @@ int main(int argc, char **argv)
     if (p_id == 0)
     { // custom input running
         printf("running a custom input...\n");
-        get_custominput(solution_id, work_dir);
+        printf("Not implement yet...\n");
         init_syscalls_limits(lang);
         pid_t pidApp = fork();
 
