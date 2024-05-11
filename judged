@@ -46,7 +46,7 @@ export HOME=/home/judge
 case "${1:-''}" in
 'start')
     # Start daemon
-    export LANG=zh_CN.UTF-8
+    export LANG=es_ES.UTF-8
     /usr/bin/judged
     ;;
 'stop')
