@@ -918,7 +918,7 @@ int compile(int lang, char *work_dir)
     const char *CP_PY[] = {"/usr/bin/python3.7", "-m", "pyflakes", "Main.py", NULL};
     const char *CP_PY12[] = {"/usr/bin/python3.12", "-c", "import py_compile; py_compile.compile(r'Main.py')", NULL};
     const char *CP_CPP20[] = {"/bin/sh", "-c", 
-        "/usr/bin/dos2unix -b Main.psc  && /usr/bin/pseint Main.psc --draw Main.psd --fixwincharset --norun pseint.txt && /usr/bin/psexport --lang=cpp Main.psd Main.cc && g++ Main.cc -o Main -fno-asm -Wall -lm --static -DONLINE_JUDGE",
+        "chown judge:judge Main.psc && /usr/bin/dos2unix -b Main.psc  && /usr/bin/pseint Main.psc --draw Main.psd --fixwincharset --norun pseint.txt && /usr/bin/psexport --lang=cpp Main.psd Main.cc && g++ Main.cc -o Main -fno-asm -Wall -lm --static -DONLINE_JUDGE",
         NULL
     };
     char javac_buf[7][16];
