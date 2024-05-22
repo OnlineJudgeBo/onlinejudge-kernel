@@ -1918,41 +1918,12 @@ void init_parameters(int argc, char **argv, int &solution_id, int &runner_id)
 
 int get_sim(int solution_id, int lang, int pid, int &sim_s_id)
 {
+    printf("Creating AC code solutionid = %d, lang=%d, pid=%d \n",solution_id, lang, pid);
     char src_pth[BUFFER_SIZE];
-    // char cmd[BUFFER_SIZE];
     sprintf(src_pth, "Main.%s", lang_ext[lang]);
-
-    int sim = execute_cmd("/usr/bin/sim.sh %s %d", src_pth, pid);
-    if (!sim)
-    {
-        execute_cmd("/bin/mkdir ../data/%d/ac/", pid);
-
-        execute_cmd("/bin/cp %s ../data/%d/ac/%d.%s", src_pth, pid, solution_id,
-                    lang_ext[lang]);
-        // c cpp will
-        if (lang == 0)
-            execute_cmd("/bin/ln ../data/%d/ac/%d.%s ../data/%d/ac/%d.%s", pid,
-                        solution_id, lang_ext[lang], pid, solution_id,
-                        lang_ext[lang + 1]);
-        if (lang == 1)
-            execute_cmd("/bin/ln ../data/%d/ac/%d.%s ../data/%d/ac/%d.%s", pid,
-                        solution_id, lang_ext[lang], pid, solution_id,
-                        lang_ext[lang - 1]);
-    }
-    else
-    {
-
-        FILE *pf;
-        pf = fopen("sim", "r");
-        if (pf)
-        {
-            fscanf(pf, "%d%d", &sim, &sim_s_id);
-            fclose(pf);
-        }
-    }
-    if (solution_id <= sim_s_id)
-        sim = 0;
-    return sim;
+    execute_cmd("/bin/mkdir ../data/%d/ac/", pid);
+    execute_cmd("/bin/cp %s ../data/%d/ac/%d.%s", src_pth, pid, solution_id, lang_ext[lang]);
+    return 0;
 }
 
 void mk_shm_workdir(char *work_dir)
@@ -2231,7 +2202,7 @@ int main(int argc, char **argv)
     }
     if (ACflg == OJ_AC && PEflg == OJ_PE)
         ACflg = OJ_PE;
-    if (sim_enable && ACflg == OJ_AC && (!oi_mode || finalACflg == OJ_AC) && (lang < 5))
+    if (sim_enable && ACflg == OJ_AC && (!oi_mode || finalACflg == OJ_AC))
     { // bash don't supported
         sim = get_sim(solution_id, lang, p_id, sim_s_id);
     }
