@@ -50,12 +50,15 @@
 #include <mysql/mysql.h>
 #include <assert.h>
 #include "okcalls.h"
+#include <curl/curl.h>
+#include "cJSON.h"
 
 #define STD_MB 1048576
 #define STD_T_LIM 2
 #define STD_F_LIM (STD_MB << 5)
 #define STD_M_LIM (STD_MB << 7)
 #define BUFFER_SIZE 512
+#define BUFFER_CODE_SIZE 5000
 
 #define LOCKFILE "/var/run/judged.pid"
 #define CONFIGFILE "/home/judge/etc/judge.conf"
@@ -1094,6 +1097,21 @@ int init_mysql_conn()
     return 1;
 }
 
+void _get_remote_solution_mysql(int solution_id, char *code, int lang)
+{
+    char sql[BUFFER_SIZE], src_pth[BUFFER_SIZE];
+
+    MYSQL_RES *res;
+    MYSQL_ROW row;
+    sprintf(sql, "SELECT source FROM source_code WHERE solution_id=%d",
+            solution_id);
+    mysql_real_query(conn, sql, strlen(sql));
+    res = mysql_store_result(conn);
+    row = mysql_fetch_row(res);
+    //printf("The code is %s ", row[0]);
+    sprintf(code, "%s", row[0]);
+}
+
 void _get_solution_mysql(int solution_id, char *work_dir, int lang)
 {
     char sql[BUFFER_SIZE], src_pth[BUFFER_SIZE];
@@ -1121,32 +1139,32 @@ void get_solution(int solution_id, char *work_dir, int lang)
     _get_solution_mysql(solution_id, work_dir, lang);
 }
 
-void _get_solution_info_mysql(int solution_id, int &p_id, char *user_id, int &lang)
+void _get_solution_info_mysql(int solution_id, int &p_id, char *user_id, int &lang, bool &is_remote_id)
 {
 
     MYSQL_RES *res;
     MYSQL_ROW row;
 
     char sql[BUFFER_SIZE];
-    sprintf(sql, "SELECT problem_id, user_id, language FROM solution where solution_id=%d", solution_id);
-    // printf("%s\n",sql);
+    sprintf(sql, "SELECT problem_id, user_id, language, is_remote_oj FROM solution WHERE solution_id=%d", solution_id);
+    //printf("%s\n",sql);
     mysql_real_query(conn, sql, strlen(sql));
     res = mysql_store_result(conn);
     row = mysql_fetch_row(res);
     p_id = atoi(row[0]);
     strcpy(user_id, row[1]);
     lang = atoi(row[2]);
+    is_remote_id = atoi(row[3]) == 1;
     mysql_free_result(res);
 }
 
-void get_solution_info(int solution_id, int &p_id, char *user_id, int &lang)
+void get_solution_info(int solution_id, int &p_id, char *user_id, int &lang, bool &is_remote_id)
 {
-    _get_solution_info_mysql(solution_id, p_id, user_id, lang);
+    _get_solution_info_mysql(solution_id, p_id, user_id, lang, is_remote_id);
 }
 
 void _get_problem_info_mysql(int p_id, int &time_lmt, int &mem_lmt, int &isspj)
 {
-    // get the problem info from Table:problem
     char sql[BUFFER_SIZE];
     MYSQL_RES *res;
     MYSQL_ROW row;
@@ -1975,23 +1993,129 @@ void print_call_array()
     printf("0};\n");
 }
 
+static size_t WriteCallback(void *contents, size_t size, size_t nmemb, void *userp) {
+    return size * nmemb;
+}
+
+void send_request_to_patito_judge(const char *json_data, const char *callback_url, const char *token)
+{
+    CURL *curl;
+    CURLcode res;
+    struct curl_slist *headers = NULL;
+
+    char auth_header[2024];
+    snprintf(auth_header, sizeof(auth_header), "Authorization: Bearer %s", token);
+
+    curl = curl_easy_init();
+    if (curl)
+    {
+        headers = curl_slist_append(headers, "Content-Type: application/json");
+        headers = curl_slist_append(headers, auth_header);
+
+        curl_easy_setopt(curl, CURLOPT_URL, callback_url);
+        curl_easy_setopt(curl, CURLOPT_POSTFIELDS, json_data);
+        curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
+        curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteCallback);
+
+        res = curl_easy_perform(curl);
+        if (res != CURLE_OK)
+        {
+            fprintf(stderr, "curl_easy_perform() failed: %s\n", curl_easy_strerror(res));
+        }
+        curl_easy_cleanup(curl);
+        curl_slist_free_all(headers);
+    }
+}
+
+void create_json_response (
+    int memory, const char* in_date, int result, int time,
+    const char* judgetime, int remote_id, const char* callback_url, const char* token) {
+
+    cJSON *root = cJSON_CreateObject();
+    cJSON_AddNumberToObject(root, "time", time);
+    cJSON_AddNumberToObject(root, "memory", memory);
+    cJSON_AddStringToObject(root, "in_date", in_date);
+    cJSON_AddNumberToObject(root, "result", result);
+    cJSON_AddStringToObject(root, "judgetime", judgetime ? judgetime : "NULL");
+    cJSON_AddNumberToObject(root, "remote_id", remote_id);
+
+    char *json_data = cJSON_Print(root);
+    if (json_data) {
+        //printf("%s\n", json_data);
+        send_request_to_patito_judge(json_data, callback_url, token);
+        free(json_data);
+    }
+
+    cJSON_Delete(root);
+}
+
+void get_solution_json(int solution_id) {
+    MYSQL_RES *res;
+    MYSQL_ROW row;
+
+    char query[512];
+    snprintf(query, sizeof(query),
+        "SELECT problem_id, time, memory, in_date, result, language, code_length, judgetime, remote_id, remote_clients.callback_url, token "
+        "FROM solution, solution_client, remote_clients "
+        "WHERE solution.solution_id = %d "
+        "AND solution_client.solution_id = solution.solution_id "
+        "AND remote_clients.client_id = solution_client.client_id "
+        "AND remote_clients.is_available = 1", solution_id);
+
+    if (mysql_query(conn, query)) {
+        fprintf(stderr, "%s\n", mysql_error(conn));
+        mysql_close(conn);
+        return;
+    }
+
+    res = mysql_store_result(conn);
+
+    if (res == NULL) {
+        fprintf(stderr, "%s\n", mysql_error(conn));
+        mysql_close(conn);
+        return;
+    }
+
+    row = mysql_fetch_row(res);
+
+    if (row) {
+        int problem_id = atoi(row[0]);
+        int time = atoi(row[1]);
+        int memory = atoi(row[2]);
+        const char* in_date = row[3];
+        int result = atoi(row[4]);
+        int language = atoi(row[5]);
+        int code_length = atoi(row[6]);
+        const char* judgetime = row[7] ? row[7] : NULL;
+        int remote_id = atoi(row[8]);
+        const char* callback_url = row[9];
+        const char* token = row[10];
+
+        create_json_response(memory, in_date, result, time, judgetime, remote_id, callback_url, token);
+    }
+
+    mysql_free_result(res);
+}
+
 int main(int argc, char **argv)
 {
     char work_dir[BUFFER_SIZE];
     // char cmd[BUFFER_SIZE];
     char user_id[BUFFER_SIZE];
+    char code[BUFFER_CODE_SIZE];
     int solution_id = 1000;
     int runner_id = 0;
     int p_id, time_lmt, mem_lmt, lang, isspj, sim, sim_s_id, max_case_time = 0;
+    bool is_remote_id = false;
 
     init_parameters(argc, argv, solution_id, runner_id);
-
     init_mysql_conf();
 
     if (!init_mysql_conn())
     {
-        exit(0); // exit if mysql is down
+        exit(0);
     }
+
     // set work directory to start running & judging
     sprintf(work_dir, "%s/run%s/", oj_home, argv[2]);
 
@@ -2001,13 +2125,14 @@ int main(int argc, char **argv)
     chdir(work_dir);
     if (!DEBUG)
         clean_workdir(work_dir);
-
-    get_solution_info(solution_id, p_id, user_id, lang);
+        
+    get_solution_info(solution_id, p_id, user_id, lang, is_remote_id);
     printf("lenguage  %d\n", lang);
     // get the limit
 
     if (p_id == 0)
     {
+        //External execution
         time_lmt = 5;
         mem_lmt = 128;
         isspj = 0;
@@ -2017,6 +2142,7 @@ int main(int argc, char **argv)
         get_problem_info(p_id, time_lmt, mem_lmt, isspj);
     }
     // copy source file
+    printf("lenguage*/*/*  %d %s %d\n", solution_id, work_dir, lang);
 
     get_solution(solution_id, work_dir, lang);
 
@@ -2248,6 +2374,13 @@ int main(int argc, char **argv)
     update_user(user_id);
     update_problem(p_id);
     clean_workdir(work_dir);
+
+    if (is_remote_id) {
+        get_solution_json(solution_id);
+        printf("Yes is remote code %d\n", solution_id);
+    } else {
+        printf("Yes is local code %d \n", solution_id);
+    }
 
     if (DEBUG)
         write_log("result=%d", oi_mode ? finalACflg : ACflg);
