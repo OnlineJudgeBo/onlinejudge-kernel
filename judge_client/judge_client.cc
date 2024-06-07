@@ -50,12 +50,15 @@
 #include <mysql/mysql.h>
 #include <assert.h>
 #include "okcalls.h"
+#include <curl/curl.h>
+#include "cJSON.h"
 
 #define STD_MB 1048576
 #define STD_T_LIM 2
 #define STD_F_LIM (STD_MB << 5)
 #define STD_M_LIM (STD_MB << 7)
 #define BUFFER_SIZE 512
+#define BUFFER_CODE_SIZE 5000
 
 #define LOCKFILE "/var/run/judged.pid"
 #define CONFIGFILE "/home/judge/etc/judge.conf"
@@ -119,7 +122,7 @@ static double cpu_compensation = 1.0;
 #define ZOJ_COM
 MYSQL *conn;
 
-static char lang_ext[20][8] = {
+static char lang_ext[21][8] = {
     "c",    // 0
     "cc",   // 1
     "pas",  // 2
@@ -140,6 +143,7 @@ static char lang_ext[20][8] = {
     "py",   // 17
     "go",   // 18
     "py",   // 19
+    "psc",  // 20
 };
 
 // static char buf[BUFFER_SIZE];
@@ -240,7 +244,7 @@ void init_syscalls_limits(int lang)
             call_counter[i] = 0;
         }
     }
-    else if (lang <= 1 || lang == 13 || lang == 14 || lang == 16)
+    else if (lang <= 1 || lang == 13 || lang == 14 || lang == 16 || lang == 20)
     { // C & C++
         for (i = 0; i == 0 || LANG_CV[i]; i++)
             call_counter[LANG_CV[i]] = HOJ_MAX_LIMIT;
@@ -731,8 +735,7 @@ void _addceinfo_mysql(int solution_id)
     char sql[(1 << 16)], *end;
     char ceinfo[(1 << 16)], *cend;
     FILE *fp = fopen("ce.txt", "r");
-    snprintf(sql, (1 << 16) - 1, "DELETE FROM compileinfo WHERE solution_id=%d",
-             solution_id);
+    snprintf(sql, (1 << 16) - 1, "DELETE FROM compileinfo WHERE solution_id=%d", solution_id);
     mysql_real_query(conn, sql, strlen(sql));
     cend = ceinfo;
     while (fgets(cend, 1024, fp))
@@ -846,12 +849,12 @@ void _update_user_mysql(char *user_id)
 {
     char sql[BUFFER_SIZE];
     sprintf(sql,
-            "UPDATE `users` SET `solved`=(SELECT count(DISTINCT `problem_id`) FROM `solution` WHERE `user_id`=\'%s\' AND `result`=\'4\') WHERE `user_id`=\'%s\'",
+            "UPDATE `user_activity` SET `solved`=(SELECT count(DISTINCT `problem_id`) FROM `solution` WHERE `user_id`=\'%s\' AND `result`=\'4\') WHERE `user_id`=\'%s\'",
             user_id, user_id);
     if (mysql_real_query(conn, sql, strlen(sql)))
         write_log(mysql_error(conn));
     sprintf(sql,
-            "UPDATE `users` SET `submit`=(SELECT count(*) FROM `solution` WHERE `user_id`=\'%s\') WHERE `user_id`=\'%s\'",
+            "UPDATE `user_activity` SET `submit`=(SELECT count(*) FROM `solution` WHERE `user_id`=\'%s\') WHERE `user_id`=\'%s\'",
             user_id, user_id);
     if (mysql_real_query(conn, sql, strlen(sql)))
         write_log(mysql_error(conn));
@@ -916,8 +919,11 @@ int compile(int lang, char *work_dir)
     const char *CP_X11[] = {"g++", "Main.cc", "-o", "Main", "-fno-asm", "-Wall", "-lm", "--static", "-std=c++11", "-DONLINE_JUDGE", NULL};
     const char *CP_GO[] = {"go", "build", "-o", "Main", "Main.go", NULL};
     const char *CP_PY[] = {"/usr/bin/python3.7", "-m", "pyflakes", "Main.py", NULL};
-    const char *CP_PY12[] = {"/usr/bin/python3.12", "-c", "import py_compile; py_compile.compile(r'Main.py')", NULL };
-
+    const char *CP_PY12[] = {"/usr/bin/python3.12", "-c", "import py_compile; py_compile.compile(r'Main.py')", NULL};
+    const char *CP_CPP20[] = {"/bin/sh", "-c", 
+        "chown judge:judge Main.psc && /usr/bin/dos2unix -b Main.psc  && /usr/bin/pseint Main.psc --draw Main.psd --fixwincharset --norun pseint.txt && /usr/bin/psexport --lang=cpp Main.psd Main.cc && g++ Main.cc -o Main -fno-asm -Wall -lm --static -DONLINE_JUDGE",
+        NULL
+    };
     char javac_buf[7][16];
     char *CP_J[7];
 
@@ -971,6 +977,7 @@ int compile(int lang, char *work_dir)
             sleep(1);
         while (setresuid(1536, 1536, 1536) != 0)
             sleep(1);
+        printf("lllllaaaaannnng");
         switch (lang)
         {
         case 0:
@@ -1021,6 +1028,11 @@ int compile(int lang, char *work_dir)
         case 19:
             execvp(CP_PY12[0], (char *const *)CP_PY12);
             break;
+        case 20:
+            printf("+++++++++++++++++++++++++++++");
+            execvp(CP_CPP20[0], (char *const *)CP_CPP20);
+            printf("%s", (char *const *)CP_CPP20[0]);
+            break;
         default:
             printf("nothing to do!\n");
         }
@@ -1068,12 +1080,10 @@ int get_proc_status(int pid, const char *mark)
 int init_mysql_conn()
 {
     conn = mysql_init(NULL);
-    // mysql_real_connect(conn,host_name,user_name,password,db_name,port_number,0,0);
     const char timeout = 30;
     mysql_options(conn, MYSQL_OPT_CONNECT_TIMEOUT, &timeout);
 
-    if (!mysql_real_connect(conn, host_name, user_name, password, db_name,
-                            port_number, 0, 0))
+    if (!mysql_real_connect(conn, host_name, user_name, password, db_name, port_number, 0, 0))
     {
         write_log("%s", mysql_error(conn));
         return 0;
@@ -1085,6 +1095,21 @@ int init_mysql_conn()
         return 0;
     }
     return 1;
+}
+
+void _get_remote_solution_mysql(int solution_id, char *code, int lang)
+{
+    char sql[BUFFER_SIZE], src_pth[BUFFER_SIZE];
+
+    MYSQL_RES *res;
+    MYSQL_ROW row;
+    sprintf(sql, "SELECT source FROM source_code WHERE solution_id=%d",
+            solution_id);
+    mysql_real_query(conn, sql, strlen(sql));
+    res = mysql_store_result(conn);
+    row = mysql_fetch_row(res);
+    //printf("The code is %s ", row[0]);
+    sprintf(code, "%s", row[0]);
 }
 
 void _get_solution_mysql(int solution_id, char *work_dir, int lang)
@@ -1114,63 +1139,32 @@ void get_solution(int solution_id, char *work_dir, int lang)
     _get_solution_mysql(solution_id, work_dir, lang);
 }
 
-void _get_custominput_mysql(int solution_id, char *work_dir)
-{
-    char sql[BUFFER_SIZE], src_pth[BUFFER_SIZE];
-    // get the source code
-    MYSQL_RES *res;
-    MYSQL_ROW row;
-    sprintf(sql, "SELECT input_text FROM custominput WHERE solution_id=%d",
-            solution_id);
-    mysql_real_query(conn, sql, strlen(sql));
-    res = mysql_store_result(conn);
-    row = mysql_fetch_row(res);
-    if (row != NULL)
-    {
-
-        // create the src file
-        sprintf(src_pth, "data.in");
-        FILE *fp_src = fopen(src_pth, "w");
-        fprintf(fp_src, "%s", row[0]);
-        fclose(fp_src);
-    }
-    mysql_free_result(res);
-}
-
-void get_custominput(int solution_id, char *work_dir)
-{
-    _get_custominput_mysql(solution_id, work_dir);
-}
-
-void _get_solution_info_mysql(int solution_id, int &p_id, char *user_id, int &lang)
+void _get_solution_info_mysql(int solution_id, int &p_id, char *user_id, int &lang, bool &is_remote_id)
 {
 
     MYSQL_RES *res;
     MYSQL_ROW row;
 
     char sql[BUFFER_SIZE];
-    // get the problem id and user id from Table:solution
-    sprintf(sql,
-            "SELECT problem_id, user_id, language FROM solution where solution_id=%d",
-            solution_id);
-    // printf("%s\n",sql);
+    sprintf(sql, "SELECT problem_id, user_id, language, is_remote_oj FROM solution WHERE solution_id=%d", solution_id);
+    //printf("%s\n",sql);
     mysql_real_query(conn, sql, strlen(sql));
     res = mysql_store_result(conn);
     row = mysql_fetch_row(res);
     p_id = atoi(row[0]);
     strcpy(user_id, row[1]);
     lang = atoi(row[2]);
+    is_remote_id = atoi(row[3]) == 1;
     mysql_free_result(res);
 }
 
-void get_solution_info(int solution_id, int &p_id, char *user_id, int &lang)
+void get_solution_info(int solution_id, int &p_id, char *user_id, int &lang, bool &is_remote_id)
 {
-    _get_solution_info_mysql(solution_id, p_id, user_id, lang);
+    _get_solution_info_mysql(solution_id, p_id, user_id, lang, is_remote_id);
 }
 
 void _get_problem_info_mysql(int p_id, int &time_lmt, int &mem_lmt, int &isspj)
 {
-    // get the problem info from Table:problem
     char sql[BUFFER_SIZE];
     MYSQL_RES *res;
     MYSQL_ROW row;
@@ -1505,6 +1499,7 @@ void run_solution(int &lang, char *work_dir, int &time_lmt, int &usedtime, int &
     case 13:
     case 14:
     case 18:
+    case 20:
     case 16:
         execl("./Main", "./Main", (char *)NULL);
         break;
@@ -1941,41 +1936,12 @@ void init_parameters(int argc, char **argv, int &solution_id, int &runner_id)
 
 int get_sim(int solution_id, int lang, int pid, int &sim_s_id)
 {
+    printf("Creating AC code solutionid = %d, lang=%d, pid=%d \n",solution_id, lang, pid);
     char src_pth[BUFFER_SIZE];
-    // char cmd[BUFFER_SIZE];
     sprintf(src_pth, "Main.%s", lang_ext[lang]);
-
-    int sim = execute_cmd("/usr/bin/sim.sh %s %d", src_pth, pid);
-    if (!sim)
-    {
-        execute_cmd("/bin/mkdir ../data/%d/ac/", pid);
-
-        execute_cmd("/bin/cp %s ../data/%d/ac/%d.%s", src_pth, pid, solution_id,
-                    lang_ext[lang]);
-        // c cpp will
-        if (lang == 0)
-            execute_cmd("/bin/ln ../data/%d/ac/%d.%s ../data/%d/ac/%d.%s", pid,
-                        solution_id, lang_ext[lang], pid, solution_id,
-                        lang_ext[lang + 1]);
-        if (lang == 1)
-            execute_cmd("/bin/ln ../data/%d/ac/%d.%s ../data/%d/ac/%d.%s", pid,
-                        solution_id, lang_ext[lang], pid, solution_id,
-                        lang_ext[lang - 1]);
-    }
-    else
-    {
-
-        FILE *pf;
-        pf = fopen("sim", "r");
-        if (pf)
-        {
-            fscanf(pf, "%d%d", &sim, &sim_s_id);
-            fclose(pf);
-        }
-    }
-    if (solution_id <= sim_s_id)
-        sim = 0;
-    return sim;
+    execute_cmd("/bin/mkdir ../data/%d/ac/", pid);
+    execute_cmd("/bin/cp %s ../data/%d/ac/%d.%s", src_pth, pid, solution_id, lang_ext[lang]);
+    return 0;
 }
 
 void mk_shm_workdir(char *work_dir)
@@ -2027,23 +1993,129 @@ void print_call_array()
     printf("0};\n");
 }
 
+static size_t WriteCallback(void *contents, size_t size, size_t nmemb, void *userp) {
+    return size * nmemb;
+}
+
+void send_request_to_patito_judge(const char *json_data, const char *callback_url, const char *token)
+{
+    CURL *curl;
+    CURLcode res;
+    struct curl_slist *headers = NULL;
+
+    char auth_header[2024];
+    snprintf(auth_header, sizeof(auth_header), "Authorization: Bearer %s", token);
+
+    curl = curl_easy_init();
+    if (curl)
+    {
+        headers = curl_slist_append(headers, "Content-Type: application/json");
+        headers = curl_slist_append(headers, auth_header);
+
+        curl_easy_setopt(curl, CURLOPT_URL, callback_url);
+        curl_easy_setopt(curl, CURLOPT_POSTFIELDS, json_data);
+        curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
+        curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteCallback);
+
+        res = curl_easy_perform(curl);
+        if (res != CURLE_OK)
+        {
+            fprintf(stderr, "curl_easy_perform() failed: %s\n", curl_easy_strerror(res));
+        }
+        curl_easy_cleanup(curl);
+        curl_slist_free_all(headers);
+    }
+}
+
+void create_json_response (
+    int memory, const char* in_date, int result, int time,
+    const char* judgetime, int remote_id, const char* callback_url, const char* token) {
+
+    cJSON *root = cJSON_CreateObject();
+    cJSON_AddNumberToObject(root, "time", time);
+    cJSON_AddNumberToObject(root, "memory", memory);
+    cJSON_AddStringToObject(root, "in_date", in_date);
+    cJSON_AddNumberToObject(root, "result", result);
+    cJSON_AddStringToObject(root, "judgetime", judgetime ? judgetime : "NULL");
+    cJSON_AddNumberToObject(root, "remote_id", remote_id);
+
+    char *json_data = cJSON_Print(root);
+    if (json_data) {
+        //printf("%s\n", json_data);
+        send_request_to_patito_judge(json_data, callback_url, token);
+        free(json_data);
+    }
+
+    cJSON_Delete(root);
+}
+
+void get_solution_json(int solution_id) {
+    MYSQL_RES *res;
+    MYSQL_ROW row;
+
+    char query[512];
+    snprintf(query, sizeof(query),
+        "SELECT problem_id, time, memory, in_date, result, language, code_length, judgetime, remote_id, remote_clients.callback_url, token "
+        "FROM solution, solution_client, remote_clients "
+        "WHERE solution.solution_id = %d "
+        "AND solution_client.solution_id = solution.solution_id "
+        "AND remote_clients.client_id = solution_client.client_id "
+        "AND remote_clients.is_available = 1", solution_id);
+
+    if (mysql_query(conn, query)) {
+        fprintf(stderr, "%s\n", mysql_error(conn));
+        mysql_close(conn);
+        return;
+    }
+
+    res = mysql_store_result(conn);
+
+    if (res == NULL) {
+        fprintf(stderr, "%s\n", mysql_error(conn));
+        mysql_close(conn);
+        return;
+    }
+
+    row = mysql_fetch_row(res);
+
+    if (row) {
+        int problem_id = atoi(row[0]);
+        int time = atoi(row[1]);
+        int memory = atoi(row[2]);
+        const char* in_date = row[3];
+        int result = atoi(row[4]);
+        int language = atoi(row[5]);
+        int code_length = atoi(row[6]);
+        const char* judgetime = row[7] ? row[7] : NULL;
+        int remote_id = atoi(row[8]);
+        const char* callback_url = row[9];
+        const char* token = row[10];
+
+        create_json_response(memory, in_date, result, time, judgetime, remote_id, callback_url, token);
+    }
+
+    mysql_free_result(res);
+}
+
 int main(int argc, char **argv)
 {
     char work_dir[BUFFER_SIZE];
     // char cmd[BUFFER_SIZE];
     char user_id[BUFFER_SIZE];
+    char code[BUFFER_CODE_SIZE];
     int solution_id = 1000;
     int runner_id = 0;
     int p_id, time_lmt, mem_lmt, lang, isspj, sim, sim_s_id, max_case_time = 0;
+    bool is_remote_id = false;
 
     init_parameters(argc, argv, solution_id, runner_id);
-
     init_mysql_conf();
 
     if (!init_mysql_conn())
     {
-        exit(0); // exit if mysql is down
+        exit(0);
     }
+
     // set work directory to start running & judging
     sprintf(work_dir, "%s/run%s/", oj_home, argv[2]);
 
@@ -2053,13 +2125,14 @@ int main(int argc, char **argv)
     chdir(work_dir);
     if (!DEBUG)
         clean_workdir(work_dir);
-
-    get_solution_info(solution_id, p_id, user_id, lang);
+        
+    get_solution_info(solution_id, p_id, user_id, lang, is_remote_id);
     printf("lenguage  %d\n", lang);
     // get the limit
 
     if (p_id == 0)
     {
+        //External execution
         time_lmt = 5;
         mem_lmt = 128;
         isspj = 0;
@@ -2069,6 +2142,7 @@ int main(int argc, char **argv)
         get_problem_info(p_id, time_lmt, mem_lmt, isspj);
     }
     // copy source file
+    printf("lenguage*/*/*  %d %s %d\n", solution_id, work_dir, lang);
 
     get_solution(solution_id, work_dir, lang);
 
@@ -2168,7 +2242,7 @@ int main(int argc, char **argv)
     if (p_id == 0)
     { // custom input running
         printf("running a custom input...\n");
-        get_custominput(solution_id, work_dir);
+        printf("Not implement yet...\n");
         init_syscalls_limits(lang);
         pid_t pidApp = fork();
 
@@ -2254,7 +2328,7 @@ int main(int argc, char **argv)
     }
     if (ACflg == OJ_AC && PEflg == OJ_PE)
         ACflg = OJ_PE;
-    if (sim_enable && ACflg == OJ_AC && (!oi_mode || finalACflg == OJ_AC) && (lang < 5))
+    if (sim_enable && ACflg == OJ_AC && (!oi_mode || finalACflg == OJ_AC))
     { // bash don't supported
         sim = get_sim(solution_id, lang, p_id, sim_s_id);
     }
@@ -2300,6 +2374,13 @@ int main(int argc, char **argv)
     update_user(user_id);
     update_problem(p_id);
     clean_workdir(work_dir);
+
+    if (is_remote_id) {
+        get_solution_json(solution_id);
+        printf("Yes is remote code %d\n", solution_id);
+    } else {
+        printf("Yes is local code %d \n", solution_id);
+    }
 
     if (DEBUG)
         write_log("result=%d", oi_mode ? finalACflg : ACflg);
