@@ -4,6 +4,9 @@ chmod +x pseint/pseint pseint/psexport
 cp -f pseint/pseint /usr/bin/pseint
 cp -f pseint/psexport /usr/bin/psexport
 
+cp -f ./anti_cheating/anti_cheating.sh /usr/bin/anti_cheating.sh
+chmod +x /usr/bin/anti_cheating.sh
+
 service judged stop
 cd $PWD/judge
 make
@@ -11,32 +14,10 @@ chmod +x judged
 cp -f  judged /usr/bin
 
 cd ../judge_client
+make clean
 make
 chmod +x judge_client
-cp -f judge_client /usr/bin
-
-#cd ..
-#cd sim/sim_3_01/
-#make fresh
-#make exes
-#chmod +x sim*
-
-#cp -f sim_c.exe /usr/bin/sim_c
-#cp -f sim_java.exe /usr/bin/sim_java
-#cp -f sim_pasc.exe /usr/bin/sim_pas
-#cp -f sim_text.exe /usr/bin/sim_text
-#cd ..
-
-#cp sim.sh /usr/bin
-#chmod +x /usr/bin/sim.sh
-
-#rm /usr/bin/sim_cc /usr/bin/sim_rb /usr/bin/sim_sh
-#ln -sf /usr/bin/sim_c /usr/bin/sim_cc
-#ln -sf /usr/bin/sim_text /usr/bin/sim_rb
-#ln -sf /usr/bin/sim_text /usr/bin/sim_sh
-#cd ..
-
-#########
+cp -f judge_client /usr/bin/
 
 cp judged /etc/init.d/judged
 chmod +x  /etc/init.d/judged

@@ -1771,7 +1771,7 @@ Similar_Code get_similar_code(int solution_id, int lang, int p_id, int contest_i
     int first_number;
     int second_number = 0;
     double third_number = 0.0;
-    char buffer[BUFFER_SIZE];
+    char buffer[BUFFER_SIZE] = "";
     char output[BUFFER_SIZE] = "";
 
     FILE *fjobs = read_cmd_output("%s", cmd);
