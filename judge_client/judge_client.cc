@@ -1762,7 +1762,16 @@ void save_contest_solution(int solution_id, int lang, int pid, int contest_id)
     execute_cmd("/bin/mkdir -p ../data/contests/%d/problem/%d", contest_id, pid);
     execute_cmd("/bin/cp %s ../data/contests/%d/problem/%d/%d.%s", src_pth, contest_id, pid, solution_id, lang_ext[lang]);
 }
-
+/**
+ * @brief Get percent of similar code
+ * 
+ * @param solution_id 
+ * @param lang 
+ * @param p_id 
+ * @param contest_id 
+ * @param work_dir 
+ * @return percentage of Similar_Code 
+ */
 Similar_Code get_similar_code(int solution_id, int lang, int p_id, int contest_id, char *work_dir)
 {
     char cmd[BUFFER_SIZE];
@@ -1783,6 +1792,7 @@ Similar_Code get_similar_code(int solution_id, int lang, int p_id, int contest_i
 
     if (sscanf(output, "%d%*[^,],%d%*[^,],%lf", &first_number, &second_number, &third_number) != 3) {
         printf("Error reading command output\n");
+        printf("%s", output);
     }
 
     Similar_Code similar;
@@ -2191,14 +2201,17 @@ int main(int argc, char **argv)
             printf("add RE Line 2130 info of %d..... \n", solution_id);
         addreinfo(solution_id);
     }
+
     if (use_max_time)
     {
         usedtime = max_case_time;
     }
+
     if (ACflg == OJ_TL)
     {
         usedtime = time_lmt * 1000;
     }
+
     if (oi_mode)
     {
         if (num_of_test > 0)
@@ -2209,6 +2222,7 @@ int main(int argc, char **argv)
     {
         update_solution(solution_id, ACflg, usedtime, topmemory >> 10, sim, sim_s_id, 0);
     }
+
     if ((oi_mode && finalACflg == OJ_WA) || ACflg == OJ_WA)
     {
         if (DEBUG)
