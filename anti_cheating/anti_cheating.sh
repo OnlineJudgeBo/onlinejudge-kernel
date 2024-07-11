@@ -27,7 +27,7 @@ if [ "$file_count" -eq 1 ]; then
     exit 0
 fi
 
-dolos run * > $TMP_DIR/problem/$PROBLEM_ID/salida.txt
+docker run -v "$PWD:/dolos" --rm --entrypoint "/bin/sh" ghcr.io/dodona-edu/dolos-cli:2.7.1 -c "dolos /dolos/*" > $TMP_DIR/problem/$PROBLEM_ID/salida.txt
 
 output=$(cat $TMP_DIR/problem/$PROBLEM_ID/salida.txt | grep $SOLUTION_ID | head -n 1 | awk '{print $1,$2,$3}')
 IFS=' ' read -r first_param second_param third_param <<< "$output"
