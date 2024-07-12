@@ -625,7 +625,7 @@ void addceinfo(int solution_id)
 /* write runtime error message back to database */
 void _addreinfo_mysql(int solution_id, const char *filename)
 {
-    sprintf("Deleting reinfo solution_id=%d\n", solution_id);
+    printf("Deleting reinfo solution_id=%d\n", solution_id);
     char sql[(1 << 16)], *end;
     char reinfo[(1 << 16)], *rend;
     FILE *fp = fopen(filename, "r");
