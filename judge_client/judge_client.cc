@@ -473,63 +473,10 @@ void delnextline(char s[])
 
 int compare(const char *file1, const char *file2)
 {
-#ifdef ZOJ_COM
     // compare ported and improved from zoj don't limit file size
     if (DEBUG)
         printf("Compile end! and Compare ZOj init\n");
     return compare_zoj(file1, file2);
-#endif
-#ifndef ZOJ_COM
-    // the original compare from the first version of hustoj has file size limit
-    // and waste memory
-    FILE *f1, *f2;
-    char *s1, *s2, *p1, *p2;
-    int PEflg;
-    s1 = new char[STD_F_LIM + 512];
-    s2 = new char[STD_F_LIM + 512];
-    if (!(f1 = fopen(file1, "r")))
-        return OJ_AC;
-    for (p1 = s1; EOF != fscanf(f1, "%s", p1);)
-        while (*p1)
-            p1++;
-    fclose(f1);
-    if (!(f2 = fopen(file2, "r")))
-        return OJ_RE;
-    for (p2 = s2; EOF != fscanf(f2, "%s", p2);)
-        while (*p2)
-            p2++;
-    fclose(f2);
-    if (strcmp(s1, s2) != 0)
-    {
-        delete[] s1;
-        delete[] s2;
-
-        return OJ_WA;
-    }
-    else
-    {
-        f1 = fopen(file1, "r");
-        f2 = fopen(file2, "r");
-        PEflg = 0;
-        while (PEflg == 0 && fgets(s1, STD_F_LIM, f1) && fgets(s2, STD_F_LIM, f2))
-        {
-            delnextline(s1);
-            delnextline(s2);
-            if (strcmp(s1, s2) == 0)
-                continue;
-            else
-                PEflg = 1;
-        }
-        delete[] s1;
-        delete[] s2;
-        fclose(f1);
-        fclose(f2);
-        if (PEflg)
-            return OJ_PE;
-        else
-            return OJ_AC;
-    }
-#endif
 }
 
 void _update_solution_mysql(int solution_id, int result, int time, int memory,
