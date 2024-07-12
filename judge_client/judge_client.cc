@@ -385,7 +385,7 @@ void make_diff_out(const char *file1, const char *file2, int c1, int c2, const c
     if (limi < 0)
         fprintf(out, "%s", "\n...\n");
     fprintf(out, "\n=================\n");
-    fprintf(out, "\nEste modulo esta en modo beta. No se confie \n");
+    fprintf(out, "\nEste modulo esta en modo beta. No se confié \n");
     fprintf(out, "\nDato esperado '%c', Tu salida '%c'. \n", c1, c2);
     fclose(out);
 }
@@ -456,6 +456,8 @@ int compare_zoj(const char *file1, const char *file2)
 end:
     if (ret == OJ_WA)
         make_diff_out(file1, file2, c1, c2, file1);
+    if (ret == OJ_PE)
+        make_diff_out(file1, file2, c1, c2, file1);
     if (f1)
         fclose(f1);
     if (f2)
@@ -514,7 +516,6 @@ void _update_solution_mysql(int solution_id, int result, int time, int memory,
 void update_solution(int solution_id, int result, int time, int memory, int sim,
                      int sim_s_id, double pass_rate)
 {
-    printf("+++++++++++++++++++++++++++%d", result);
     if (result == OJ_TL && memory == 0)
         result = OJ_ML;
     _update_solution_mysql(solution_id, result, time, memory, sim, sim_s_id, pass_rate);
@@ -2180,10 +2181,10 @@ int main(int argc, char **argv)
         if (!isspj)
             adddiffinfo(solution_id);
     }
-    printf("Adding user information user_id=%s", user_id);
+    printf("Adding user information user_id=%s\n", user_id);
     update_user(user_id);
 
-    printf("Updating problem information p_id=%d", p_id);
+    printf("Updating problem information p_id=%d\n", p_id);
     update_problem(p_id);
     clean_workdir(work_dir);
 
@@ -2198,7 +2199,7 @@ int main(int argc, char **argv)
     }
 
     if (DEBUG)
-        write_log("result=%d", oi_mode ? finalACflg : ACflg);
+        write_log("result=%d\n", oi_mode ? finalACflg : ACflg);
 
     mysql_close(conn);
     if (record_call)
