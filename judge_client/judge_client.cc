@@ -649,7 +649,7 @@ void _addreinfo_mysql(int solution_id, const char *filename)
     }
     *rend = '\0';
 
-    sprintf("Adding reinfo solution_id=%d\n", solution_id);
+    printf("Adding reinfo solution_id=%d\n", solution_id);
     end = sql;
     strcpy(end, "INSERT INTO runtimeinfo VALUES(");
     end += strlen("INSERT INTO runtimeinfo VALUES(");
@@ -668,7 +668,7 @@ void _addreinfo_mysql(int solution_id, const char *filename)
     }
 
     fclose(fp);
-    sprintf("End reinfo solution_id=%d\n", solution_id);
+    printf("End reinfo solution_id=%d\n", solution_id);
 }
 
 void addreinfo(int solution_id)
@@ -2233,10 +2233,10 @@ int main(int argc, char **argv)
         if (!isspj)
             adddiffinfo(solution_id);
     }
-    sprintf("Adding user information user_id=%s", user_id);
+    printf("Adding user information user_id=%s", user_id);
     update_user(user_id);
 
-    sprintf("Updating problem information p_id=%d", p_id);
+    printf("Updating problem information p_id=%d", p_id);
     update_problem(p_id);
     clean_workdir(work_dir);
 
