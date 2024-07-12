@@ -2181,6 +2181,12 @@ int main(int argc, char **argv)
         if (!isspj)
             adddiffinfo(solution_id);
     }
+
+    if (ACflg == OJ_PE)
+    {
+        adddiffinfo(solution_id);
+    }
+
     printf("Adding user information user_id=%s\n", user_id);
     update_user(user_id);
 
