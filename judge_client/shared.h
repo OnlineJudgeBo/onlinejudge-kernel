@@ -10,6 +10,7 @@
 #define STD_M_LIM (STD_MB << 7)
 #define BUFFER_SIZE 512
 #define BUFFER_CODE_SIZE 5000
+#define ZOJ_COM
 
 #define LOCKFILE "/var/run/judged.pid"
 #define CONFIGFILE "/home/judge/etc/judge.conf"
