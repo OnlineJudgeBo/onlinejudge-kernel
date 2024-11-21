@@ -1815,8 +1815,6 @@ int main(int argc, char **argv) {
     _addceinfo_mysql(solution_id);
     update_solution(solution_id, OJ_CE, 0, 0, 0, 0, 0.0);
     update_user(user_id);
-
-    printf("Updating problem information p_id=%d\n", p_id);
     update_problem(p_id);
     mysql_close(conn);
 
