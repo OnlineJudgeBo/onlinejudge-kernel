@@ -23,11 +23,10 @@ int java_time_bonus = 5;
 int java_memory_bonus = 512;
 char java_xms[BUFFER_SIZE] = "128m";
 char java_xmx[BUFFER_SIZE] = "512m";
-int sim_enable = 0;
-int oi_mode = 0;
+int sim_enable = 1;
 int use_max_time = 0;
 int http_judge = 0;
-int shm_run = 0;
+bool oi_mode = false;
 char record_call = 0;
 double cpu_compensation = 1.0;
 MYSQL *conn = NULL;
@@ -118,8 +117,4 @@ void print_runtimeerror(char *err)
     FILE *ferr = fopen("error.out", "a+");
     fprintf(ferr, "Runtime Error: %s\n", err);
     fclose(ferr);
-}
-
-static size_t WriteCallback(void *contents, size_t size, size_t nmemb, void *userp) {
-    return size * nmemb;
 }

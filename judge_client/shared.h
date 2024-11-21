@@ -2,7 +2,7 @@
 #define SHARED_H
 
 #include <mysql/mysql.h>
-#include <stdio.h> 
+#include <stdio.h>
 
 #define STD_MB 1048576
 #define STD_T_LIM 2
@@ -61,10 +61,10 @@ extern int java_memory_bonus;
 extern char java_xms[BUFFER_SIZE];
 extern char java_xmx[BUFFER_SIZE];
 extern int sim_enable;
-extern int oi_mode;
+extern bool oi_mode;
 extern int use_max_time;
 extern int http_judge;
-extern int shm_run;
+
 extern char record_call;
 extern double cpu_compensation;
 extern MYSQL *conn;
