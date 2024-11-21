@@ -11,7 +11,7 @@ service judged stop
 cd $PWD/judge
 make
 chmod +x judged
-cp -f  judged /usr/bin
+cp -f  judged /usr/bin/
 
 cd ../judge_client
 make clean
@@ -19,6 +19,7 @@ make
 chmod +x judge_client
 cp -f judge_client /usr/bin/
 
+cd ..
 cp judged /etc/init.d/judged
 chmod +x  /etc/init.d/judged
 
