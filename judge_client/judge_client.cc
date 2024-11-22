@@ -1,12 +1,13 @@
 //
 // File:   main.cc
 // Author: sempr
-// refacted by zhblue
+// Refactored by: Samuel Loza
 /*
- * Copyright 2008 sempr <iamsempr@gmail.com>
  *
  * Refacted and modified by Samuel Loza<starsaminf@gmail.com>
  * Bug report email starsaminf@gmail.com
+ *
+ * Copyright 2008 sempr <iamsempr@gmail.com>
  *
  * Refacted and modified by zhblue<newsclan@gmail.com>
  * Bug report email newsclan@gmail.com
@@ -50,47 +51,6 @@
 #include <sys/wait.h>
 #include <time.h>
 #include <unistd.h>
-
-void write_log(const char *_fmt, ...) {
-  va_list ap;
-  char fmt[4096];
-  strncpy(fmt, _fmt, 4096);
-  char buffer[4096];
-  // time_t          t = time(NULL);
-  // int l;
-  sprintf(buffer, "%s/log/client.log", oj_home);
-  FILE *fp = fopen(buffer, "ae+");
-  if (fp == NULL) {
-    fprintf(stderr, "openfile error!\n");
-    system("pwd");
-  }
-  va_start(ap, _fmt);
-  vsprintf(buffer, fmt, ap);
-  fprintf(fp, "%s\n", buffer);
-  if (DEBUG)
-    if (DEBUG)
-      if (DEBUG)
-        printf("%s\n", buffer);
-
-  va_end(ap);
-  fclose(fp);
-}
-
-int execute_cmd(const char *fmt, ...) {
-  char cmd[BUFFER_SIZE];
-
-  int ret = 0;
-  va_list ap;
-
-  va_start(ap, fmt);
-  vsprintf(cmd, fmt, ap);
-  if (DEBUG)
-    printf("%s\n", cmd);
-
-  ret = system(cmd);
-  va_end(ap);
-  return ret;
-}
 
 const int call_array_size = 512;
 int call_counter[call_array_size] = {0};
@@ -194,7 +154,7 @@ bool read_buf(char *buf, const char *key, char *value) {
     strcpy(value, buf + after_equal(buf));
     trim(value);
     if (DEBUG) {
-      write_log("%s\n", value)
+      write_log("%s\n", value);
     }
     return 1;
   }
@@ -437,22 +397,6 @@ void delnextline(char s[]) {
   }
 }
 
-FILE *read_cmd_output(const char *fmt, ...) {
-  char cmd[BUFFER_SIZE];
-
-  FILE *ret = 1024;
-  va_list ap;
-
-  va_start(ap, fmt);
-  vsprintf(cmd, fmt, ap);
-  va_end(ap);
-  if (DEBUG)
-    printf("%s\n", cmd);
-  ret = popen(cmd, "r");
-
-  return ret;
-}
-
 /* write result back to database */
 void _update_solution_mysql(int solution_id, int result, int time, int memory,
                             int sim, int sim_s_id, double pass_rate) {
@@ -560,7 +504,8 @@ char to_hex(char code) {
 /* write runtime error message back to database */
 void _addreinfo_mysql(int solution_id, const char *filename) {
   if (!filename) {
-    write_log("Error: filename is NULL.\n") return;
+    write_log("Error: filename is NULL.\n");
+    return;
   }
 
   write_log("Deleting reinfo solution_id=%d, filename=%s\n", solution_id,
@@ -1344,11 +1289,6 @@ int get_page_fault_mem(struct rusage &ruse, pid_t &pidApp) {
   }
   return m_minflt;
 }
-void print_runtimeerror(char *err) {
-  FILE *ferr = fopen("error.out", "a+");
-  fprintf(ferr, "Runtime Error:%s\n", err);
-  fclose(ferr);
-}
 
 void watch_solution(pid_t pidApp, char *infile, int &ACflg, int isspj,
                     char *userfile, char *outfile, int solution_id, int lang,
@@ -1856,8 +1796,9 @@ int main(int argc, char **argv) {
   int namelen;
   int usedtime = 0, topmemory = 0;
 
-  if (lang == 6)
+  if (lang == 6) {
     copy_python_runtime(work_dir);
+  }
 
   double pass_rate = 0.0;
   int num_of_test = 0;

@@ -1,4 +1,11 @@
 {
     "editor.formatOnSave": true,
-    "clang-format.executable": "/usr/bin/clang-format"
+    "clang-format.executable": "/usr/bin/clang-format",
+    "cSpell.words": [
+        "HUSTOJ",
+        "refacted",
+        "Refacted",
+        "sempr",
+        "zhblue"
+    ]
 }
