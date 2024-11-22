@@ -47,7 +47,7 @@ LOGFILE="/var/log/judged.log"
 case "${1:-''}" in
 'start')
     # Start daemon
-    export LANG=zh_CN.UTF-8
+    export LANG=en_US.UTF-8
     #/usr/bin/judged /home/judge/ true true true  >> $LOGFILE 2>&1 &
     /usr/bin/judged
     ;;
