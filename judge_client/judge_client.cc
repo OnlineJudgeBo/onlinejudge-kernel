@@ -36,6 +36,7 @@
 #include <curl/curl.h>
 #include <dirent.h>
 #include <mysql/mysql.h>
+#include <sched.h>
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -117,64 +118,6 @@ void init_syscalls_limits(int lang) {
   }
 }
 
-int after_equal(const char *c) {
-  if (!c) {
-    return 0;
-  }
-
-  int i = 0;
-  while (c[i] != '\0') {
-    if (c[i] == '=') {
-      return i + 1;
-    }
-    i++;
-  }
-  return 0;
-}
-
-void trim(char *c) {
-  char buf[BUFFER_SIZE];
-  char *start, *end;
-  strcpy(buf, c);
-  start = buf;
-  while (isspace(*start)) {
-    start++;
-  }
-  end = start;
-  while (!isspace(*end)) {
-    end++;
-  }
-  *end = '\0';
-
-  strcpy(c, start);
-}
-
-bool read_buf(char *buf, const char *key, char *value) {
-  if (strncmp(buf, key, strlen(key)) == 0) {
-    strcpy(value, buf + after_equal(buf));
-    trim(value);
-    if (DEBUG) {
-      write_log("%s\n", value);
-    }
-    return 1;
-  }
-  return 0;
-}
-
-void read_double(char *buf, const char *key, double *value) {
-  char buf2[BUFFER_SIZE];
-  if (read_buf(buf, key, buf2)) {
-    sscanf(buf2, "%lf", value);
-  }
-}
-
-void read_int(char *buf, const char *key, int *value) {
-  char buf2[BUFFER_SIZE];
-  if (read_buf(buf, key, buf2)) {
-    sscanf(buf2, "%d", value);
-  }
-}
-
 void init_mysql_conf() {
   FILE *fp = NULL;
   char buf[BUFFER_SIZE];
@@ -201,15 +144,6 @@ void init_mysql_conf() {
       read_buf(buf, "OJ_JAVA_XMX", java_xmx);
       read_int(buf, "OJ_USE_MAX_TIME", &use_max_time);
     }
-  }
-}
-
-int isInFile(const char fname[]) {
-  int l = strlen(fname);
-  if (l <= 3 || strcmp(fname + l - 3, ".in") != 0) {
-    return 0;
-  } else {
-    return l - 3;
   }
 }
 
@@ -248,15 +182,6 @@ void find_next_nonspace(int &c1, int &c2, FILE *&f1, FILE *&f2, int &ret) {
       c2 = fgetc(f2);
     }
   }
-}
-
-const char *getFileNameFromPath(const char *path) {
-  for (int i = strlen(path); i >= 0; i--) {
-    if (path[i] == '/') {
-      return &path[i];
-    }
-  }
-  return path;
 }
 
 // edit by sam show different fails 2016
@@ -389,14 +314,6 @@ end:
   return ret;
 }
 
-void delnextline(char s[]) {
-  int L;
-  L = strlen(s);
-  while (L > 0 && (s[L - 1] == '\n' || s[L - 1] == '\r')) {
-    s[--L] = 0;
-  }
-}
-
 /* write result back to database */
 void _update_solution_mysql(int solution_id, int result, int time, int memory,
                             int sim, int sim_s_id, double pass_rate) {
@@ -417,12 +334,12 @@ void _update_solution_mysql(int solution_id, int result, int time, int memory,
   }
 
   if (sql_len < 0 || sql_len >= BUFFER_SIZE) {
-    write_log("Error: SQL buffer overflow detected.\n");
+    write_log("Error: SQL buffer overflow detected.");
     return;
   }
 
   if (mysql_real_query(conn, sql, sql_len)) {
-    write_log("MySQL Error: %s\n", mysql_error(conn));
+    write_log("MySQL Error: %s", mysql_error(conn));
     return;
   }
 
@@ -435,12 +352,12 @@ void _update_solution_mysql(int solution_id, int result, int time, int memory,
         solution_id, sim_s_id, sim, sim_s_id, sim);
 
     if (sql_len < 0 || sql_len >= BUFFER_SIZE) {
-      write_log("Error: SQL buffer overflow detected.\n");
+      write_log("Error: SQL buffer overflow detected.");
       return;
     }
 
     if (mysql_real_query(conn, sql, sql_len)) {
-      write_log("MySQL Error: %s\n", mysql_error(conn));
+      write_log("MySQL Error: %s", mysql_error(conn));
     }
   }
 }
@@ -461,6 +378,10 @@ void _addceinfo_mysql(int solution_id) {
 
   snprintf(sql, (1 << 16) - 1, "DELETE FROM compileinfo WHERE solution_id=%d",
            solution_id);
+  if (DEBUG) {
+    write_log("Add Ceinfo solution_id =%d Query=%s", solution_id, sql);
+  }
+
   mysql_real_query(conn, sql, strlen(sql));
 
   cend = ceinfo;
@@ -486,7 +407,7 @@ void _addceinfo_mysql(int solution_id) {
   *end = 0;
 
   if (mysql_real_query(conn, sql, end - sql)) {
-    write_log("%s\n", mysql_error(conn));
+    write_log("%s", mysql_error(conn));
   }
   fclose(fp);
 }
@@ -504,69 +425,56 @@ char to_hex(char code) {
 /* write runtime error message back to database */
 void _addreinfo_mysql(int solution_id, const char *filename) {
   if (!filename) {
-    write_log("Error: filename is NULL.\n");
+    write_log("Error: filename is NULL");
     return;
   }
 
-  write_log("Deleting reinfo solution_id=%d, filename=%s\n", solution_id,
-            filename);
+  if (DEBUG) {
+    write_log("Deleting reinfo solution_id=%d, filename=%s", solution_id, filename);
+  }
 
-  char sql[65536];
+  char sql[69536];
   char reinfo[65536];
-  char *rend = reinfo;
 
   FILE *fp = fopen(filename, "r");
   if (!fp) {
     perror("Error opening file");
     return;
   }
-
   snprintf(sql, sizeof(sql), "DELETE FROM runtimeinfo WHERE solution_id=%d",
            solution_id);
 
   if (mysql_real_query(conn, sql, strlen(sql))) {
-    write_log("MySQL Error (DELETE): %s\n", mysql_error(conn));
+    write_log("MySQL Error (DELETE): %s", mysql_error(conn));
     fclose(fp);
     return;
   }
 
-  int limit = 1024;
-  int ch;
-  while ((ch = fgetc(fp)) != EOF && limit--) {
-    if (ch > 0) {
-      *rend++ = (char)ch;
-    }
-  }
-  if (limit == 0) {
-    rend += snprintf(rend, sizeof(reinfo) - (rend - reinfo), "\n ... \n");
-  }
-  *rend = '\0';
-
   fclose(fp);
 
-  write_log("Adding reinfo solution_id=%d\n", solution_id);
-
-  char escaped_reinfo[65536];
-  size_t escaped_len =
-      mysql_real_escape_string(conn, escaped_reinfo, reinfo, strlen(reinfo));
-
   snprintf(sql, sizeof(sql),
-           "INSERT INTO runtimeinfo (solution_id, info) VALUES ('%d', '%.*s')",
-           solution_id, (int)escaped_len, escaped_reinfo);
+           "INSERT INTO runtimeinfo (solution_id, error) VALUES ('%d', '%s')",
+           solution_id, escape_string(reinfo));
 
   if (mysql_real_query(conn, sql, strlen(sql))) {
-    write_log("MySQL Error (INSERT): %s\n", mysql_error(conn));
+    write_log("MySQL Error runtimeinfo (INSERT): %s", mysql_error(conn));
   }
 
-  write_log("End reinfo solution_id=%d\n", solution_id);
+  write_log("End runtimeinfo solution_id=%d", solution_id);
 }
 
-void addreinfo(int solution_id) { _addreinfo_mysql(solution_id, "error.out"); }
+void addreinfo(int solution_id) { 
+  if (DEBUG) {
+    write_log("Adding reinfo to solution=%d", solution_id);
+  }
+  _addreinfo_mysql(solution_id, "error.out");
+}
 
-void adddiffinfo(int solution_id) { _addreinfo_mysql(solution_id, "diff.out"); }
-
-void addcustomout(int solution_id) {
-  _addreinfo_mysql(solution_id, "user.out");
+void adddiffinfo(int solution_id) {
+  if (DEBUG) {
+    write_log("Adding info to solution=%d", solution_id);
+  }
+  _addreinfo_mysql(solution_id, "diff.out");
 }
 
 void _update_user_mysql(const char *user_id) {
@@ -655,7 +563,9 @@ void _update_problem_mysql(int p_id) {
   }
 }
 
-void update_problem(int pid) { _update_problem_mysql(pid); }
+void update_problem(int pid) { 
+  _update_problem_mysql(pid);
+}
 
 int compile(int lang, char *work_dir) {
   int pid;
@@ -696,35 +606,20 @@ int compile(int lang, char *work_dir) {
       "Main.cc -o Main -fno-asm -Wall -lm --static -DONLINE_JUDGE",
       NULL};
 
-  char javac_buf[7][16];
+  char javac_buf[7][32];
   char *CP_J[7];
 
   for (int i = 0; i < 7; i++) {
     CP_J[i] = javac_buf[i];
   }
 
-  strncpy(CP_J[0], "javac", BUFFER_SIZE - 1);
-  CP_J[0][BUFFER_SIZE - 1] = '\0';
-
-  int written = snprintf(CP_J[1], BUFFER_SIZE, "-J%s", java_xms);
-  if (written < 0 || written >= BUFFER_SIZE) {
-    write_log("Warning: java_xms truncated to fit into CP_J[1]\n");
-  }
-
-  written = snprintf(CP_J[2], BUFFER_SIZE, "-J%s", java_xmx);
-  if (written < 0 || written >= BUFFER_SIZE) {
-    write_log("Warning: java_xmx truncated to fit into CP_J[2]\n");
-  }
-
-  strncpy(CP_J[3], "-encoding", BUFFER_SIZE - 1);
-  CP_J[3][BUFFER_SIZE - 1] = '\0';
-
-  strncpy(CP_J[4], "UTF-8", BUFFER_SIZE - 1);
-  CP_J[4][BUFFER_SIZE - 1] = '\0';
-
-  strncpy(CP_J[5], "Main.java", BUFFER_SIZE - 1);
-  CP_J[5][BUFFER_SIZE - 1] = '\0';
-  CP_J[6] = NULL;
+  snprintf(CP_J[0], sizeof(javac_buf[0]), "javac");
+  snprintf(CP_J[1], sizeof(javac_buf[1]), "-J%s", java_xms);
+  snprintf(CP_J[2], sizeof(javac_buf[2]), "-J%s", java_xmx);
+  snprintf(CP_J[3], sizeof(javac_buf[3]), "-encoding");
+  snprintf(CP_J[4], sizeof(javac_buf[4]), "UTF-8");
+  snprintf(CP_J[5], sizeof(javac_buf[5]), "Main.java");
+  CP_J[6] = (char *)NULL;
 
   pid = fork();
   if (pid == 0) {
@@ -765,6 +660,10 @@ int compile(int lang, char *work_dir) {
       sleep(1);
     }
 
+    if (DEBUG) {
+      write_log("The language selected is lang=%d", lang);
+    }
+
     switch (lang) {
     case 0:
       execvp(CP_C[0], (char *const *)CP_C);
@@ -794,10 +693,11 @@ int compile(int lang, char *work_dir) {
       execvp(CP_CPP20[0], (char *const *)CP_CPP20);
       break;
     default:
-      write_log("nothing to do!\n");
+      write_log("Nothing to do!");
     }
+
     if (DEBUG) {
-      write_log("compile end Line 882!\n");
+      write_log("Compile end!");
     }
     exit(0);
   } else {
@@ -805,9 +705,6 @@ int compile(int lang, char *work_dir) {
     waitpid(pid, &status, 0);
     if (lang > 3 && lang < 7) {
       status = get_file_size("ce.txt");
-    }
-    if (DEBUG) {
-      write_log("status=%d Line 832\n", status);
     }
     return status;
   }
@@ -877,7 +774,7 @@ void _get_solution_mysql(int solution_id, char *work_dir, int lang) {
 
   sprintf(src_pth, "Main.%s", lang_ext[lang]);
   if (DEBUG) {
-    write_log("Main=%s\n", src_pth);
+    write_log("Main=%s", src_pth);
   }
   FILE *fp_src = fopen(src_pth, "w");
   fprintf(fp_src, "%s", row[0]);
@@ -1075,6 +972,8 @@ void run_solution(int &lang, char *work_dir, int &time_lmt, int &usedtime,
   setrlimit(RLIMIT_FSIZE, &LIM);
   switch (lang) {
   case 3: // java
+    LIM.rlim_cur = LIM.rlim_max = 50;
+    break;
   default:
     LIM.rlim_cur = LIM.rlim_max = 1;
   }
@@ -1178,11 +1077,10 @@ int fix_java_mis_judge(char *work_dir, int &ACflg, int &topmemory,
 int special_judge(char *oj_home, int problem_id, char *infile, char *outfile,
                   char *userfile) {
   pid_t pid;
-  write_log("special judge pid=%d\n", problem_id);
+  write_log("special judge pid=%d", problem_id);
   pid = fork();
   int ret = 0;
   if (pid == 0) {
-
     while (setgid(1536) != 0) {
       sleep(1);
     }
@@ -1221,7 +1119,7 @@ int special_judge(char *oj_home, int problem_id, char *infile, char *outfile,
     waitpid(pid, &status, 0);
     ret = WEXITSTATUS(status);
     if (DEBUG) {
-      write_log("spj2=%d\n", ret);
+      write_log("spj2=%d", ret);
     }
   }
   return ret;
@@ -1250,7 +1148,7 @@ void judge_solution(int &ACflg, int &usedtime, int time_lmt, int isspj,
         comp_res = OJ_AC;
       } else {
         if (DEBUG) {
-          write_log("fail test %s\n", infile);
+          write_log("fail test %s", infile);
         }
         comp_res = OJ_WA;
       }
@@ -1260,7 +1158,7 @@ void judge_solution(int &ACflg, int &usedtime, int time_lmt, int isspj,
     if (comp_res == OJ_WA) {
       ACflg = OJ_WA;
       if (DEBUG) {
-        write_log("fail test %s\n", infile);
+        write_log("fail test %s", infile);
       }
     } else if (comp_res == OJ_PE) {
       PEflg = OJ_PE;
@@ -1297,12 +1195,13 @@ void watch_solution(pid_t pidApp, char *infile, int &ACflg, int isspj,
   int tempmemory;
 
   if (DEBUG) {
-    write_log("watch_solution pid=%d judging %s\n", pidApp, infile);
+    write_log("Watching solution pid=%d judging %s", pidApp, infile);
   }
 
   int status, sig, exitcode;
   struct user_regs_struct reg;
   struct rusage ruse;
+
   while (1) {
     wait4(pidApp, &status, 0, &ruse);
 
@@ -1317,8 +1216,9 @@ void watch_solution(pid_t pidApp, char *infile, int &ACflg, int isspj,
     }
     if (topmemory > mem_lmt * STD_MB) {
       if (DEBUG) {
-        write_log("out of memory %d\n", topmemory);
+        write_log("Out of memory %d", topmemory);
       }
+
       if (ACflg == OJ_AC) {
         ACflg = OJ_ML;
       }
@@ -1329,6 +1229,7 @@ void watch_solution(pid_t pidApp, char *infile, int &ACflg, int isspj,
     if (WIFEXITED(status)) {
       break;
     }
+  
     if ((lang < 4 || lang == 9 || lang == 17 || lang == 19) &&
         get_file_size("error.out") && !oi_mode) {
       ACflg = OJ_RE;
@@ -1352,7 +1253,7 @@ void watch_solution(pid_t pidApp, char *infile, int &ACflg, int isspj,
       ;
     } else {
       if (DEBUG) {
-        write_log("status>>8=%d\n", exitcode);
+        write_log("status>>8=%d", exitcode);
       }
 
       if (ACflg == OJ_AC) {
@@ -1376,6 +1277,7 @@ void watch_solution(pid_t pidApp, char *infile, int &ACflg, int isspj,
 
       break;
     }
+
     if (WIFSIGNALED(status)) {
       /*  WIFSIGNALED: if the process is terminated by signal
        *
@@ -1386,7 +1288,7 @@ void watch_solution(pid_t pidApp, char *infile, int &ACflg, int isspj,
       sig = WTERMSIG(status);
 
       if (DEBUG) {
-        write_log("WTERMSIG=%d\n", sig);
+        write_log("WTERMSIG=%d", sig);
         psignal(sig, NULL);
       }
       if (ACflg == OJ_AC) {
@@ -1418,12 +1320,14 @@ void watch_solution(pid_t pidApp, char *infile, int &ACflg, int isspj,
     // check the system calls
     ptrace(PTRACE_GETREGS, pidApp, NULL, &reg);
     if (call_counter[reg.REG_SYSCALL]) {
+      ;
     } else if (record_call) {
       call_counter[reg.REG_SYSCALL] = 1;
-    } else { // do not limit JVM syscall for using different JVM
+    } else {
+      // do not limit JVM syscall for using different JVM
       ACflg = OJ_RE;
       char error[BUFFER_SIZE];
-      sprintf(
+      write_log(
           error,
           "[ERROR] A Not allowed system call: runid:%d callid:%ld\n TO FIX "
           "THIS , ask admin to add the CALLID into corresponding LANG_XXV[] "
@@ -1491,7 +1395,7 @@ void get_sim(int solution_id, int lang, int pid, int &sim_s_id) {
 }
 
 void save_contest_solution(int solution_id, int lang, int pid, int contest_id) {
-  printf("The solution of the contest is AC, constest_id= %d, solution_id = "
+  write_log("The solution of the contest is AC, constest_id= %d, solution_id = "
          "%d, problem_id=%d \n",
          contest_id, solution_id, pid);
   char src_pth[BUFFER_SIZE];
@@ -1609,7 +1513,7 @@ void send_request_to_patito_judge(const char *json_data,
 
     res = curl_easy_perform(curl);
     if (res != CURLE_OK) {
-      write_log("curl_easy_perform() failed: %s\n", curl_easy_strerror(res));
+      write_log("curl_easy_perform() failed: %s", curl_easy_strerror(res));
     }
     curl_easy_cleanup(curl);
     curl_slist_free_all(headers);
@@ -1656,7 +1560,7 @@ void get_solution_json(int solution_id) {
       solution_id);
 
   if (mysql_query(conn, query)) {
-    write_log("%s\n", mysql_error(conn));
+    write_log("%s", mysql_error(conn));
     mysql_close(conn);
     return;
   }
@@ -1664,7 +1568,7 @@ void get_solution_json(int solution_id) {
   res = mysql_store_result(conn);
 
   if (res == NULL) {
-    write_log("%s\n", mysql_error(conn));
+    write_log("%s", mysql_error(conn));
     mysql_close(conn);
     return;
   }
@@ -1704,15 +1608,14 @@ int main(int argc, char **argv) {
   if (!init_mysql_conn()) {
     exit(0);
   }
-
   int written =
       snprintf(work_dir, sizeof(work_dir), "%s/run%s/", oj_home, argv[2]);
 
   if (written < 0) {
-    write_log("Error generating work_dir with snprintf.\n");
+    write_log("Error generating work_dir with snprintf.");
     exit(EXIT_FAILURE);
   } else if (written >= (int)sizeof(work_dir)) {
-    write_log("Error: Buffer overflow detected. work_dir truncated.\n");
+    write_log("Error: Buffer overflow detected. work_dir truncated.");
     exit(EXIT_FAILURE);
   }
 
@@ -1726,7 +1629,7 @@ int main(int argc, char **argv) {
   if (p_id > 0) {
     get_problem_info(p_id, time_lmt, mem_lmt, isspj);
   }
-  write_log("solution_id=%d, work_dir=%s, lang=%d\n", solution_id, work_dir,
+  write_log("solution_id=%d, work_dir=%s, lang=%d", solution_id, work_dir,
             lang);
 
   get_solution(solution_id, work_dir, lang);
@@ -1745,18 +1648,21 @@ int main(int argc, char **argv) {
   }
 
   if (DEBUG) {
-    write_log("time: %d mem: %d\n", time_lmt, mem_lmt);
+    write_log("time: %d mem: %d", time_lmt, mem_lmt);
   }
 
-  int Compile_OK;
+  int Compile_OK = compile(lang, work_dir);
+  
+  if (DEBUG) {
+    write_log("The compilation was successfull \n");
+  }
 
-  Compile_OK = compile(lang, work_dir);
   if (Compile_OK != 0) {
     _addceinfo_mysql(solution_id);
     update_solution(solution_id, OJ_CE, 0, 0, 0, 0, 0.0);
     update_user(user_id);
 
-    printf("Updating problem information p_id=%d\n", p_id);
+    write_log("Updating problem information p_id=%d", p_id);
     update_problem(p_id);
     mysql_close(conn);
 
@@ -1769,6 +1675,7 @@ int main(int argc, char **argv) {
   } else {
     update_solution(solution_id, OJ_RI, 0, 0, 0, 0, 0.0);
   }
+
   char fullpath[BUFFER_SIZE];
   char infile[BUFFER_SIZE];
   char outfile[BUFFER_SIZE];
@@ -1778,7 +1685,7 @@ int main(int argc, char **argv) {
 
   if (written < 0 || written >= (int)sizeof(fullpath)) {
     write_log(
-        "Error: Buffer overflow or snprintf failed in fullpath generation.\n");
+        "Error: Buffer overflow or snprintf failed in fullpath generation.");
   }
 
   DIR *dp;
@@ -1786,7 +1693,7 @@ int main(int argc, char **argv) {
 
   if (p_id > 0 && (dp = opendir(fullpath)) == NULL) {
 
-    write_log("No such dir:%s!\n", fullpath);
+    write_log("No such dir:%s!", fullpath);
     mysql_close(conn);
     exit(-1);
   }
@@ -1811,6 +1718,10 @@ int main(int argc, char **argv) {
       continue;
     }
 
+    if (DEBUG) {
+      write_log("Test case name = %s", dirp->d_name);
+    }
+  
     prepare_files(dirp->d_name, namelen, infile, p_id, work_dir, outfile,
                   userfile, runner_id);
 
@@ -1826,19 +1737,24 @@ int main(int argc, char **argv) {
       watch_solution(pidApp, infile, ACflg, isspj, userfile, outfile,
                      solution_id, lang, topmemory, mem_lmt, usedtime, time_lmt,
                      p_id, PEflg, work_dir);
-
+      
       judge_solution(ACflg, usedtime, time_lmt, isspj, p_id, infile, outfile,
                      userfile, PEflg, lang, work_dir, topmemory, mem_lmt,
                      solution_id, num_of_test);
-      if (use_max_time) {
-        max_case_time = usedtime > max_case_time ? usedtime : max_case_time;
+      
+      if (use_max_time > 0) {
+        if (usedtime > max_case_time) {
+          max_case_time = usedtime;  
+        }
         usedtime = 0;
       }
     }
+
     if (oi_mode) {
       if (ACflg == OJ_AC) {
         ++pass_rate;
       }
+
       if (finalACflg < ACflg) {
         finalACflg = ACflg;
       }
@@ -1846,6 +1762,7 @@ int main(int argc, char **argv) {
       ACflg = OJ_AC;
     }
   }
+
   if (ACflg == OJ_AC && PEflg == OJ_PE) {
     ACflg = OJ_PE;
   }
@@ -1858,8 +1775,8 @@ int main(int argc, char **argv) {
           get_similar_code(solution_id, lang, p_id, contest_id, work_dir);
       sim = resul_sim.percentage;
       sim_s_id = resul_sim.similar_s_id;
-      printf("Sim percent %d", sim);
-      printf("is similar to solution_id=%d\n", sim_s_id);
+      write_log("Sim percent %d", sim);
+      write_log("is similar to solution_id=%d\n\n", sim_s_id);
     }
   } else {
     sim = 0;
@@ -1867,7 +1784,8 @@ int main(int argc, char **argv) {
 
   if ((oi_mode && finalACflg == OJ_RE) || ACflg == OJ_RE) {
     if (DEBUG) {
-      printf("add RE info of %d..... \n", solution_id);
+      write_log("The solution is RE info of %d..... ", solution_id);
+      write_log("oi_mode=%d ACflg=%d OJ_RE=%d", oi_mode, finalACflg, OJ_RE);
     }
     addreinfo(solution_id);
   }
@@ -1878,6 +1796,10 @@ int main(int argc, char **argv) {
 
   if (ACflg == OJ_TL) {
     usedtime = time_lmt * 1000;
+  }
+
+  if (DEBUG) {
+    write_log("The solution_id=%d time=%d", solution_id, usedtime);
   }
 
   if (oi_mode) {
@@ -1893,7 +1815,7 @@ int main(int argc, char **argv) {
 
   if ((oi_mode && finalACflg == OJ_WA) || ACflg == OJ_WA) {
     if (DEBUG) {
-      printf("add diff info of %d..... \n", solution_id);
+      write_log("add diff info of %d..... ", solution_id);
     }
     if (!isspj) {
       adddiffinfo(solution_id);
@@ -1904,18 +1826,18 @@ int main(int argc, char **argv) {
     adddiffinfo(solution_id);
   }
 
-  printf("Adding user information user_id=%s\n", user_id);
+  write_log("Adding user information user_id=%s", user_id);
   update_user(user_id);
 
-  printf("Updating problem information p_id=%d\n", p_id);
+  write_log("Updating problem information p_id=%d", p_id);
   update_problem(p_id);
   clean_workdir(work_dir);
 
   if (is_remote_id) {
     get_solution_json(solution_id);
-    printf("Yes is remote code %d\n", solution_id);
+    write_log("Yes is remote code %d\n", solution_id);
   } else {
-    printf("Yes is local code %d \n", solution_id);
+    write_log("Yes is local code %d \n", solution_id);
   }
 
   if (DEBUG) {
