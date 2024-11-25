@@ -8,7 +8,7 @@
 #define STD_T_LIM 2
 #define STD_F_LIM (STD_MB << 5)
 #define STD_M_LIM (STD_MB << 7)
-#define BUFFER_SIZE 512
+#define BUFFER_SIZE 2048
 #define BUFFER_CODE_SIZE 5000
 #define ZOJ_COM
 

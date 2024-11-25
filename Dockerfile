@@ -20,9 +20,6 @@ RUN mkdir -p /etc/apt/keyrings && \
 RUN update-alternatives --set java /usr/lib/jvm/temurin-8-jdk-amd64/bin/java && \
     update-alternatives --set javac /usr/lib/jvm/temurin-8-jdk-amd64/bin/javac
 
-RUN curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh | bash && \
-    bash -c 'source ~/.nvm/nvm.sh && nvm install node && npm i -g dolos'
-
 RUN git clone https://github.com/DaveGamble/cJSON.git && \
     cd cJSON && mkdir build && cd build && cmake .. -DCMAKE_INSTALL_PREFIX=/usr && make && make install && \
     cd ../../ && rm -rf cJSON
@@ -64,8 +61,13 @@ COPY entrypoint.sh /usr/local/bin/entrypoint.sh
 
 RUN chmod +x /usr/local/bin/entrypoint.sh
 
+
+RUN mkdir -p /opt/nvm && \
+curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh | NVM_DIR=/opt/nvm bash && \
+bash -c 'export NVM_DIR=/opt/nvm && source $NVM_DIR/nvm.sh && nvm install node && npm i -g @dodona/dolos'
+
 USER judge
 
 WORKDIR /home/judge
 
-ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
+ENTRYPOINT ["/usr/local/bin/entrypoint.sh", "start"]

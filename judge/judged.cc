@@ -160,7 +160,7 @@ void init_mysql_conf()
         }
         sleep_tmp = sleep_time;
     }
-    sprintf(query, "SELECT solution_id FROM solution WHERE language in (%s) and result < 2 ORDER BY result ASC,solution_id ASC limit %d", oj_lang_set, max_running * 2);
+    sprintf(query, "SELECT solution_id FROM solution WHERE language in (%s) and result < 2 ORDER BY result ASC,solution_id ASC limit %d", oj_lang_set, max_running);
     if (DEBUG)
     {
         write_log("%s", query);
@@ -257,7 +257,7 @@ int _get_jobs_mysql(int *jobs)
         jobs[i++] = atoi(row[0]);
     }
     ret = i;
-    while (i <= max_running * 2)
+    while (i <= max_running)
         jobs[i++] = 0;
     return ret;
 }
@@ -309,6 +309,7 @@ int work()
 
         if (DEBUG)
             write_log("Judging solution %d", runid);
+
         if (workcnt >= max_running)
         {                                   // if no more client can running
             tmp_pid = waitpid(-1, NULL, 0); // wait 4 one child exit
@@ -424,8 +425,9 @@ int main(int argc, char **argv)
     else
         strcpy(oj_home, JUDGEHOME);
     chdir(oj_home); // change the dir
-    if (!DEBUG)
-        daemon_init();
+    /*Diable in docker*/
+    //if (!DEBUG)
+    //daemon_init();
     if (strcmp(oj_home, JUDGEHOME) == 0 && already_running())
     {
         syslog(LOG_ERR | LOG_DAEMON, "This daemon program is already running!\n");

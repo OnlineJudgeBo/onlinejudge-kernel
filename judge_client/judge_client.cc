@@ -1,37 +1,40 @@
 //
 // File:   main.cc
 // Author: sempr
-// Refactored by: Samuel Loza
+// Refactored and modified by: Samuel Loza (2014 - Present)
+//
 /*
  *
- * Refacted and modified by Samuel Loza<starsaminf@gmail.com> 2014
- * Bug report email starsaminf@gmail.com
+ * Refactored and significantly modified by Samuel Loza <starsaminf@gmail.com> (2014 - Present)
+ * - Divided into multiple files.
+ * - Architectural reorganization.
+ * - Addition of new features.
+ * - Performance improvements and bug fixes.
  *
  * Copyright 2008 sempr <iamsempr@gmail.com>
  *
- * Refacted and modified by zhblue<newsclan@gmail.com>
- * Bug report email newsclan@gmail.com
- *
- *
- * This file is part of HUSTOJ.
- *
- * HUSTOJ is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
+ * This file is based on the original HUSTOJ code.
+ * 
+ * HUSTOJ is free software; you can redistribute it and/or modify it
+ * under the terms of the GNU General Public License as published by
  * the Free Software Foundation; either version 2 of the License, or
  * (at your option) any later version.
  *
  * HUSTOJ is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
  * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
- * along with HUSTOJ. if not, see <http://www.gnu.org/licenses/>.
+ * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
+
+
 #include "cJSON.h"
-#include "models.h"
-#include "okcalls.h"
 #include "shared.h"
+#include "similar_code/models.h"
+#include "similar_code/similar_code.h"
+#include "okcalls.h"
 #include "utils.h"
 #include <assert.h>
 #include <ctype.h>
@@ -195,7 +198,7 @@ void _update_solution_mysql(int solution_id, int result, double time, int memory
     write_log("Error: SQL buffer overflow detected.");
     return;
   }
-  write_log("%s", sql);
+
   if (mysql_real_query(conn, sql, sql_len)) {
     write_log("MySQL Error: %s", mysql_error(conn));
     return;
@@ -704,9 +707,10 @@ void prepare_files(char *filename, int namelen, char *infile, int &p_id,
   sprintf(userfile, "%s/run%d/user.out", oj_home, runner_id);
 }
 
-void prepare_file_special_judge (int &p_id, char *work_dir) {
+void prepare_special_files (int &p_id, char *work_dir) {
   execute_cmd("/bin/cp %s/data/%d/*.dic %s/", oj_home, p_id, work_dir);
 }
+
 void run_solution(int &lang, const char *work_dir, int &time_limit,
                   int &usedtime, int &mem_lmt) {
   nice(19);
@@ -1011,7 +1015,6 @@ void watch_solution(pid_t pidApp, char *infile, int &ACflg, char *userfile,
              cpu_compensation;
   usedtime += (rusage.ru_stime.tv_sec * 1000000 + rusage.ru_stime.tv_usec) *
               cpu_compensation;
-  write_log("user_time %.5f", usedtime / 1000000.0);
 }
 
 void init_parameters(int argc, char **argv, int &solution_id, int &runner_id) {
@@ -1049,59 +1052,6 @@ void save_contest_solution(int solution_id, int lang, int pid, int contest_id) {
   execute_cmd("/bin/mkdir -p ../data/contests/%d/problem/%d", contest_id, pid);
   execute_cmd("/bin/cp %s ../data/contests/%d/problem/%d/%d.%s", src_pth,
               contest_id, pid, solution_id, lang_ext[lang]);
-}
-/**
- * @brief Get percent of similar code
- *
- * @param solution_id
- * @param lang
- * @param p_id
- * @param contest_id
- * @param work_dir
- * @return percentage of Similar_Code
- */
-Similar_Code get_similar_code(int solution_id, int lang, int p_id,
-                              int contest_id, char *work_dir) {
-  char cmd[BUFFER_SIZE];
-  int written =
-      snprintf(cmd, sizeof(cmd), "/usr/bin/anti_cheating.sh %s %d %d .%s %d",
-               oj_home, solution_id, contest_id, lang_ext[lang], p_id);
-
-  if (written < 0) {
-    fprintf(stderr, "Error generating work_dir with snprintf.\n");
-    exit(EXIT_FAILURE);
-  } else if (written >= (int)sizeof(work_dir)) {
-    fprintf(stderr, "Error: Buffer overflow detected. work_dir truncated.\n");
-    exit(EXIT_FAILURE);
-  }
-
-  int first_number;
-  int second_number = 0;
-  double third_number = 0.0;
-  char buffer[BUFFER_SIZE] = "";
-  char output[BUFFER_SIZE] = "";
-
-  FILE *fjobs = read_cmd_output("%s", cmd);
-
-  while (fgets(buffer, BUFFER_SIZE, fjobs) != NULL) {
-    strcat(output, buffer);
-  }
-  pclose(fjobs);
-
-  if (sscanf(output, "%d%*[^,],%d%*[^,],%lf", &first_number, &second_number,
-             &third_number) != 3) {
-    printf("Error reading command output\n");
-    printf("%s", output);
-  }
-
-  Similar_Code similar;
-  similar.similar_s_id = second_number;
-  similar.percentage = (int)(third_number * 100);
-
-  if (similar.percentage < 70) {
-    similar.percentage = 0;
-  }
-  return similar;
 }
 
 static size_t WriteCallback(void *contents, size_t size, size_t nmemb,
@@ -1230,10 +1180,8 @@ int main(int argc, char **argv) {
 
   if (written < 0) {
     write_log("Error generating work_dir with snprintf.");
-    exit(EXIT_FAILURE);
   } else if (written >= (int)sizeof(work_dir)) {
-    write_log("Error: Buffer overflow detected. work_dir truncated.");
-    exit(EXIT_FAILURE);
+    write_log("Error: Buffer overflow detected. work_dir truncated. %s", work_dir);
   }
 
   chdir(work_dir);
@@ -1416,9 +1364,7 @@ int main(int argc, char **argv) {
     write_log("Yes is local code %d \n", solution_id);
   }
 
-  if (DEBUG) {
-    write_log("result=%d\n", ACflg);
-  }
+  write_log("result=%d time=%.5f\n", ACflg, max_case_time_ms);
 
   mysql_close(conn);
   if (record_call) {
