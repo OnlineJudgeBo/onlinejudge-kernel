@@ -1,11 +1,11 @@
 #include "shared.h"
 #include "cJSON.h"
-#include <stdio.h> 
+#include <ctype.h>
+#include <curl/curl.h>
 #include <stdarg.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <curl/curl.h>
-#include <ctype.h>
 
 int DEBUG = 0;
 char host_name[BUFFER_SIZE] = "localhost";
@@ -28,7 +28,6 @@ char java_xmx[16] = "512m";
 int sim_enable = 1;
 int use_max_time = 0;
 int http_judge = 0;
-bool oi_mode = false;
 char record_call = 1;
 double cpu_compensation = 0.5;
 MYSQL *conn = NULL;
@@ -57,93 +56,88 @@ char lang_ext[21][8] = {
     "psc",  // 20
 };
 
-FILE *read_cmd_output(const char *fmt, ...)
-{
-    char cmd[BUFFER_SIZE];
+FILE *read_cmd_output(const char *fmt, ...) {
+  char cmd[BUFFER_SIZE];
 
-    FILE *ret = NULL;
-    va_list ap;
+  FILE *ret = NULL;
+  va_list ap;
 
-    va_start(ap, fmt);
-    vsprintf(cmd, fmt, ap);
-    va_end(ap);
-    if (DEBUG)
-        printf("%s\n", cmd);
-    ret = popen(cmd, "r");
+  va_start(ap, fmt);
+  vsprintf(cmd, fmt, ap);
+  va_end(ap);
+  if (DEBUG)
+    printf("%s\n", cmd);
+  ret = popen(cmd, "r");
 
-    return ret;
+  return ret;
 }
 
-int execute_cmd(const char *fmt, ...)
-{
-    char cmd[BUFFER_SIZE];
+int execute_cmd(const char *fmt, ...) {
+  char cmd[BUFFER_SIZE];
 
-    int ret = 0;
-    va_list ap;
+  int ret = 0;
+  va_list ap;
 
-    va_start(ap, fmt);
-    vsprintf(cmd, fmt, ap);
-    ret = system(cmd);
-    va_end(ap);
-    return ret;
+  va_start(ap, fmt);
+  vsprintf(cmd, fmt, ap);
+  ret = system(cmd);
+  va_end(ap);
+  return ret;
 }
 
-void write_log(const char *_fmt, ...)
-{
-    va_list ap;
-    char fmt[4096];
-    strncpy(fmt, _fmt, 4096);
-    char buffer[4096];
-    sprintf(buffer, "%s/log/client.log", oj_home);
-    FILE *fp = fopen(buffer, "ae+");
-    if (fp == NULL)
-    {
-        fprintf(stderr, "openfile error!\n");
-        system("pwd");
-    }
-    va_start(ap, _fmt);
-    vsprintf(buffer, fmt, ap);
-    fprintf(fp, "%s\n", buffer);
-    printf("%s\n", buffer);
+void write_log(const char *_fmt, ...) {
+  va_list ap;
+  char fmt[4096];
+  strncpy(fmt, _fmt, 4096);
+  char buffer[4096];
+  sprintf(buffer, "%s/log/client.log", oj_home);
+  FILE *fp = fopen(buffer, "ae+");
+  if (fp == NULL) {
+    fprintf(stderr, "openfile error!\n");
+    system("pwd");
+  }
+  va_start(ap, _fmt);
+  vsprintf(buffer, fmt, ap);
+  fprintf(fp, "%s\n", buffer);
+  printf("%s\n", buffer);
 
-    va_end(ap);
-    fclose(fp);
+  va_end(ap);
+  fclose(fp);
 }
 
-void print_runtimeerror(char *err)
-{
-    FILE *ferr = fopen("error.out", "a+");
-    fprintf(ferr, "Runtime Error: %s\n", err);
-    fclose(ferr);
+void print_runtimeerror(char *err) {
+  FILE *ferr = fopen("error.out", "a+");
+  fprintf(ferr, "Runtime Error: %s\n", err);
+  fclose(ferr);
 }
 
 char *escape_string(const char *input) {
-    size_t input_len = strlen(input);
-    size_t max_output_len = input_len * 2 + 1;
-    
-    char *output = (char *)malloc(max_output_len);
-    memset(output, 0, sizeof(max_output_len));
-    
-    char *ptr = output;
-    while (*input) {
-        if ((unsigned char)*input == 0xFF) {
-            input += 1;
-            continue;
-        }
+  size_t input_len = strlen(input);
+  size_t max_output_len = input_len * 2 + 1;
 
-        if ((unsigned char)*(input) == 0x0A) {
-            input += 1;
-            continue;
-        }
+  char *output = (char *)malloc(max_output_len);
+  memset(output, 0, sizeof(max_output_len));
 
-        if (*input == '\'') {
-            *ptr++ = '\\';
-        }
-        *ptr++ = *input++;
+  char *ptr = output;
+  while (*input) {
+    if ((unsigned char)*input == 0xFF) {
+      input += 1;
+      continue;
     }
-    *ptr = '\0';
 
-    return output;
+    if ((unsigned char)*(input) == 0x0A) {
+      input += 1;
+      continue;
+    }
+
+    if (*input == '\'') {
+      *ptr++ = '\\';
+    }
+    *ptr++ = *input++;
+  }
+  *ptr = '\0';
+
+  return output;
 }
 
 int after_equal(const char *c) {
@@ -165,9 +159,9 @@ bool read_buf(char *buf, const char *key, char *value) {
   if (strncmp(buf, key, strlen(key)) == 0) {
     strcpy(value, buf + after_equal(buf));
     trim(value);
-    return 1;
+    return true;
   }
-  return 0;
+  return false;
 }
 
 void read_double(char *buf, const char *key, double *value) {
@@ -228,11 +222,11 @@ void delnextline(char s[]) {
 }
 
 void stabilize_cpu() {
-    struct timespec req, rem;
-    req.tv_sec = 0;      // 0 segundos
-    req.tv_nsec = 5000000; // 5 ms (en nanosegundos)
+  struct timespec req, rem;
+  req.tv_sec = 0;
+  req.tv_nsec = 5000000;
 
-    nanosleep(&req, &rem); // Pausa precisa
+  nanosleep(&req, &rem);
 }
 
 void print_call_array() {

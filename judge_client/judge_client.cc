@@ -4,7 +4,7 @@
 // Refactored by: Samuel Loza
 /*
  *
- * Refacted and modified by Samuel Loza<starsaminf@gmail.com>
+ * Refacted and modified by Samuel Loza<starsaminf@gmail.com> 2014
  * Bug report email starsaminf@gmail.com
  *
  * Copyright 2008 sempr <iamsempr@gmail.com>
@@ -29,10 +29,10 @@
  * along with HUSTOJ. if not, see <http://www.gnu.org/licenses/>.
  */
 #include "cJSON.h"
+#include "models.h"
 #include "okcalls.h"
 #include "shared.h"
 #include "utils.h"
-#include "models.h"
 #include <assert.h>
 #include <ctype.h>
 #include <curl/curl.h>
@@ -289,7 +289,8 @@ void _addreinfo_mysql(int solution_id, const char *filename) {
   }
 
   if (DEBUG) {
-    write_log("Deleting reinfo solution_id=%d, filename=%s", solution_id, filename);
+    write_log("Deleting reinfo solution_id=%d, filename=%s", solution_id,
+              filename);
   }
 
   char sql[69536];
@@ -322,7 +323,7 @@ void _addreinfo_mysql(int solution_id, const char *filename) {
   write_log("End runtimeinfo solution_id=%d", solution_id);
 }
 
-void addreinfo(int solution_id) { 
+void addreinfo(int solution_id) {
   if (DEBUG) {
     write_log("Adding reinfo to solution=%d", solution_id);
   }
@@ -385,7 +386,6 @@ void _update_problem_mysql(int p_id) {
   }
 
   char sql[BUFFER_SIZE];
-
   int sql_len = snprintf(sql, sizeof(sql),
                          "UPDATE problem "
                          "SET accepted = ("
@@ -422,9 +422,7 @@ void _update_problem_mysql(int p_id) {
   }
 }
 
-void update_problem(int pid) { 
-  _update_problem_mysql(pid);
-}
+void update_problem(int pid) { _update_problem_mysql(pid); }
 
 int compile(int lang, char *work_dir) {
   int pid;
@@ -692,7 +690,8 @@ void _get_problem_info_mysql(int p_id, int &time_limit, int &mem_lmt) {
   mem_lmt = atoi(row[1]);
   mysql_free_result(res);
   if (DEBUG) {
-    write_log("Getting  problem_id=%d time limit of the problem=%dsec", p_id, time_limit);
+    write_log("Getting  problem_id=%d time limit of the problem=%dsec", p_id,
+              time_limit);
   }
 }
 
@@ -711,51 +710,52 @@ void prepare_files(char *filename, int namelen, char *infile, int &p_id,
   fname[namelen] = 0;
   sprintf(infile, "%s/data/%d/%s.in", oj_home, p_id, fname);
   execute_cmd("/bin/cp %s %s/data.in", infile, work_dir);
-  //execute_cmd("/bin/cp %s/data/%d/*.dic %s/", oj_home, p_id, work_dir);
+  execute_cmd("/bin/cp %s/data/%d/*.dic %s/", oj_home, p_id, work_dir);
 
   sprintf(outfile, "%s/data/%d/%s.out", oj_home, p_id, fname);
   sprintf(userfile, "%s/run%d/user.out", oj_home, runner_id);
 }
 
-void run_solution(int &lang, const char *work_dir, int &time_limit, int &usedtime, int &mem_lmt) {
-    nice(19);
+void run_solution(int &lang, const char *work_dir, int &time_limit,
+                  int &usedtime, int &mem_lmt) {
+  nice(19);
 
-    if (chdir(work_dir) != 0) {
-        write_log("Failed to change directory");
-    }
+  if (chdir(work_dir) != 0) {
+    write_log("Failed to change directory");
+  }
 
-    if (freopen("data.in", "r", stdin) == NULL ||
-        freopen("user.out", "w", stdout) == NULL ||
-        freopen("error.out", "a+", stderr) == NULL) {
-        write_log("Failed to redirect input/output");
-    }
+  if (freopen("data.in", "r", stdin) == NULL ||
+      freopen("user.out", "w", stdout) == NULL ||
+      freopen("error.out", "a+", stderr) == NULL) {
+    write_log("Failed to redirect input/output");
+  }
 
-    if (ptrace(PTRACE_TRACEME, 0, NULL, NULL) != 0) {
-        write_log("Failed to enable ptrace");
-        exit(EXIT_FAILURE);
-    }
+  if (ptrace(PTRACE_TRACEME, 0, NULL, NULL) != 0) {
+    write_log("Failed to enable ptrace");
+    exit(EXIT_FAILURE);
+  }
 
-    if (lang != 3 && lang != 6 && lang != 15 && lang != 17 && lang != 19) {
-        if (chroot(work_dir) != 0) {
-            write_log("Failed to chroot");
-            exit(EXIT_FAILURE);
-        }
+  if (lang != 3 && lang != 6 && lang != 15 && lang != 17 && lang != 19) {
+    if (chroot(work_dir) != 0) {
+      write_log("Failed to chroot");
+      exit(EXIT_FAILURE);
     }
+  }
 
-    while (setgid(1536) != 0) {
-        sleep(1);
-    }
+  while (setgid(1536) != 0) {
+    sleep(1);
+  }
 
-    while (setuid(1536) != 0) {
-        sleep(1);
-    }
+  while (setuid(1536) != 0) {
+    sleep(1);
+  }
 
-    while (setresuid(1536, 1536, 1536) != 0) {
-        sleep(1);
-    }
+  while (setresuid(1536, 1536, 1536) != 0) {
+    sleep(1);
+  }
 
   struct rlimit LIM;
-  LIM.rlim_cur = (1000+(time_limit * 1000))/1000 + 1;
+  LIM.rlim_cur = (1000 + (time_limit * 1000)) / 1000 + 1;
   LIM.rlim_max = LIM.rlim_cur;
   setrlimit(RLIMIT_CPU, &LIM);
   alarm(0);
@@ -777,55 +777,54 @@ void run_solution(int &lang, const char *work_dir, int &time_limit, int &usedtim
   LIM.rlim_max = STD_MB << 6;
   setrlimit(RLIMIT_STACK, &LIM);
   // set the memory
-    LIM.rlim_cur = STD_MB * mem_lmt / 2 * 3;
-    LIM.rlim_max = STD_MB * mem_lmt * 2;
-    if (lang < 3 || lang == 16) {
-      // C, C++ y C++11
-        setrlimit(RLIMIT_AS, &LIM);
-    }
+  LIM.rlim_cur = STD_MB * mem_lmt / 2 * 3;
+  LIM.rlim_max = STD_MB * mem_lmt * 2;
+  if (lang < 3 || lang == 16) {
+    // C, C++ y C++11
+    setrlimit(RLIMIT_AS, &LIM);
+  }
 
-    switch (lang) {
+  switch (lang) {
   case 0:
   case 1:
   case 13:
   case 14:
   case 20:
   case 16:
-            execl("./Main", "./Main", (char *)NULL);
-            break;
+    execl("./Main", "./Main", (char *)NULL);
+    break;
   case 3:
-            execl("/usr/bin/java", "/usr/bin/java", java_xms, java_xmx,
-                  "-Djava.security.manager", "-Djava.security.policy=./java.policy",
-                  "Main", (char *)NULL);
-            break;
+    execl("/usr/bin/java", "/usr/bin/java", java_xms, java_xmx,
+          "-Djava.security.manager", "-Djava.security.policy=./java.policy",
+          "Main", (char *)NULL);
+    break;
   case 6: // Python
     execl("/usr/bin/python2.7", "-m", "/usr/bin/python2.7", "Main.py",
           (char *)NULL);
-            break;
+    break;
   case 15: // PYTHON3
-            execl("/usr/bin/python3", "/usr/bin/python3", "Main.py", (char *)NULL);
-            break;
+    execl("/usr/bin/python3", "/usr/bin/python3", "Main.py", (char *)NULL);
+    break;
   case 17: // PYTHON3.7
-            execl("/usr/bin/python3.7", "/usr/bin/python3.7", "Main.py", (char *)NULL);
-            break;
+    execl("/usr/bin/python3.7", "/usr/bin/python3.7", "Main.py", (char *)NULL);
+    break;
   case 19: // PYTHON3.12
     execl("/usr/bin/python3.12", "/usr/bin/python3.12", "Main.py",
           (char *)NULL);
-            break;
-    }
-    exit(0);
+    break;
+  }
+  exit(0);
 }
 
-void judge_solution(int &ACflg, int &usedtime, int time_limit,
-                    int p_id, char *infile, char *outfile, char *userfile,
-                    int &PEflg, int lang, char *work_dir, int &topmemory,
-                    int mem_lmt, int solution_id, int num_of_test) {
+void judge_solution(int &ACflg, int &usedtime, int time_limit, int p_id,
+                    char *infile, char *outfile, char *userfile, int &PEflg,
+                    int lang, char *work_dir, int &topmemory, int mem_lmt,
+                    int solution_id, int num_of_test) {
   int comp_res;
 
   if (ACflg == OJ_AC && usedtime > time_limit * 1000000) {
     ACflg = OJ_TL;
   }
-
 
   if (topmemory > mem_lmt * STD_MB) {
     ACflg = OJ_ML;
@@ -861,10 +860,10 @@ int get_page_fault_mem(struct rusage &ruse, pid_t &pidApp) {
   return m_minflt;
 }
 
-void watch_solution(pid_t pidApp, char *infile, int &ACflg,
-                    char *userfile, char *outfile, int solution_id, int lang,
-                    int &topmemory, int mem_lmt, int &usedtime, int time_limit,
-                    int &p_id, int &PEflg, char *work_dir) {
+void watch_solution(pid_t pidApp, char *infile, int &ACflg, char *userfile,
+                    char *outfile, int solution_id, int lang, int &topmemory,
+                    int mem_lmt, int &usedtime, int time_limit, int &p_id,
+                    int &PEflg, char *work_dir) {
   int tempmemory;
 
   if (DEBUG) {
@@ -884,7 +883,7 @@ void watch_solution(pid_t pidApp, char *infile, int &ACflg,
     } else { // other use VmPeak
       tempmemory = get_proc_status(pidApp, "VmPeak:") << 10;
     }
-  
+
     if (tempmemory > topmemory) {
       topmemory = tempmemory;
     }
@@ -906,7 +905,8 @@ void watch_solution(pid_t pidApp, char *infile, int &ACflg,
       break;
     }
 
-    if ((lang < 4 || lang == 9 || lang == 17 || lang == 19) && get_file_size("error.out") > 0) {
+    if ((lang < 4 || lang == 9 || lang == 17 || lang == 19) &&
+        get_file_size("error.out") > 0) {
       ACflg = OJ_RE;
       ptrace(PTRACE_KILL, pidApp, NULL, NULL);
       break;
@@ -933,18 +933,18 @@ void watch_solution(pid_t pidApp, char *infile, int &ACflg,
 
       if (ACflg == OJ_AC) {
         switch (exitcode) {
-          case SIGCHLD:
-          case SIGALRM:
-            alarm(0);
-          case SIGKILL:
-          case SIGXCPU:
-            ACflg = OJ_TL;
-            break;
-          case SIGXFSZ:
-            ACflg = OJ_OL;
-            break;
-          default:
-            ACflg = OJ_RE;
+        case SIGCHLD:
+        case SIGALRM:
+          alarm(0);
+        case SIGKILL:
+        case SIGXCPU:
+          ACflg = OJ_TL;
+          break;
+        case SIGXFSZ:
+          ACflg = OJ_OL;
+          break;
+        default:
+          ACflg = OJ_RE;
         }
         print_runtimeerror(strsignal(exitcode));
       }
@@ -968,19 +968,19 @@ void watch_solution(pid_t pidApp, char *infile, int &ACflg,
       }
       if (ACflg == OJ_AC) {
         switch (sig) {
-          case SIGCHLD:
-          case SIGALRM:
-            alarm(0);
-          case SIGKILL:
-          case SIGXCPU:
-            ACflg = OJ_TL;
-            break;
-          case SIGXFSZ:
-            ACflg = OJ_OL;
-            break;
+        case SIGCHLD:
+        case SIGALRM:
+          alarm(0);
+        case SIGKILL:
+        case SIGXCPU:
+          ACflg = OJ_TL;
+          break;
+        case SIGXFSZ:
+          ACflg = OJ_OL;
+          break;
 
-          default:
-            ACflg = OJ_RE;
+        default:
+          ACflg = OJ_RE;
         }
         print_runtimeerror(strsignal(sig));
       }
@@ -1016,9 +1016,11 @@ void watch_solution(pid_t pidApp, char *infile, int &ACflg,
     ptrace(PTRACE_SYSCALL, pidApp, NULL, NULL);
   }
 
-  usedtime = (rusage.ru_utime.tv_sec * 1000000 + rusage.ru_utime.tv_usec) * cpu_compensation;
-  usedtime += (rusage.ru_stime.tv_sec * 1000000 + rusage.ru_stime.tv_usec) * cpu_compensation;
-  write_log("user_time %.5f", usedtime/1000000.0);
+  usedtime = (rusage.ru_utime.tv_sec * 1000000 + rusage.ru_utime.tv_usec) *
+             cpu_compensation;
+  usedtime += (rusage.ru_stime.tv_sec * 1000000 + rusage.ru_stime.tv_usec) *
+              cpu_compensation;
+  write_log("user_time %.5f", usedtime / 1000000.0);
 }
 
 void init_parameters(int argc, char **argv, int &solution_id, int &runner_id) {
@@ -1049,8 +1051,8 @@ void init_parameters(int argc, char **argv, int &solution_id, int &runner_id) {
 
 void save_contest_solution(int solution_id, int lang, int pid, int contest_id) {
   write_log("The solution of the contest is AC, constest_id= %d, solution_id = "
-         "%d, problem_id=%d \n",
-         contest_id, solution_id, pid);
+            "%d, problem_id=%d \n",
+            contest_id, solution_id, pid);
   char src_pth[BUFFER_SIZE];
   sprintf(src_pth, "Main.%s", lang_ext[lang]);
   execute_cmd("/bin/mkdir -p ../data/contests/%d/problem/%d", contest_id, pid);
@@ -1280,11 +1282,10 @@ int main(int argc, char **argv) {
     write_log("Time Limit=%d Mem=%d", time_limit, mem_lmt);
     write_log("Time Limit=%d Mem=%d", time_limit, mem_lmt);
     write_log("Time Limit=%d Mem=%d", time_limit, mem_lmt);
-
   }
 
   int Compile_OK = compile(lang, work_dir);
-  
+
   if (DEBUG) {
     write_log("The compilation was completed with code %d", Compile_OK);
   }
@@ -1357,10 +1358,9 @@ int main(int argc, char **argv) {
     if (DEBUG) {
       write_log("Test case name = %s", dirp->d_name);
     }
-  
+
     prepare_files(dirp->d_name, namelen, infile, p_id, work_dir, outfile,
                   userfile, runner_id);
-    
 
     pid_t pidApp = fork();
     stabilize_cpu();
@@ -1370,16 +1370,16 @@ int main(int argc, char **argv) {
       exit(0);
     } else {
       num_of_test++;
-      watch_solution(pidApp, infile, ACflg, userfile, outfile,
-                     solution_id, lang, topmemory, mem_lmt, usedtime, time_limit,
-                     p_id, PEflg, work_dir);
-      
+      watch_solution(pidApp, infile, ACflg, userfile, outfile, solution_id,
+                     lang, topmemory, mem_lmt, usedtime, time_limit, p_id,
+                     PEflg, work_dir);
+
       judge_solution(ACflg, usedtime, time_limit, p_id, infile, outfile,
                      userfile, PEflg, lang, work_dir, topmemory, mem_lmt,
                      solution_id, num_of_test);
-      
+
       if (usedtime > max_case_time) {
-        max_case_time = usedtime;  
+        max_case_time = usedtime;
       }
     }
   }
@@ -1414,7 +1414,8 @@ int main(int argc, char **argv) {
     write_log("The solution_id=%d time used=%f", solution_id, usedtime);
   }
 
-  update_solution(solution_id, ACflg, usedtime, topmemory >> 10, sim, sim_s_id, 0);
+  update_solution(solution_id, ACflg, usedtime, topmemory >> 10, sim, sim_s_id,
+                  0);
 
   if (ACflg == OJ_PE) {
     adddiffinfo(solution_id);

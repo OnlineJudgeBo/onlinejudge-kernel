@@ -39,7 +39,6 @@
 #define REG_ARG0 rdi
 #define REG_ARG1 rsi
 
-
 extern int DEBUG;
 extern char host_name[BUFFER_SIZE];
 extern char user_name[BUFFER_SIZE];
