@@ -58,9 +58,6 @@
 void init_syscalls_limits(int lang) {
   memset(call_counter, 0, sizeof(call_counter));
   int i;
-  if (DEBUG) {
-    write_log("init_call_counter:%d", lang);
-  }
   if (record_call) {
     for (i = 0; i < CALL_ARRAY_SIZE; i++) {
       call_counter[i] = 0;
@@ -184,29 +181,21 @@ end:
   return ret;
 }
 
-void _update_solution_mysql(int solution_id, int result, int time, int memory,
+void _update_solution_mysql(int solution_id, int result, double time, int memory,
                             int sim, int sim_s_id, double pass_rate) {
   char sql[BUFFER_SIZE];
   int sql_len;
 
-  if (oi_mode) {
-    sql_len = snprintf(
-        sql, BUFFER_SIZE,
-        "UPDATE solution SET result=%d, time=%d, memory=%d, pass_rate=%f "
-        "WHERE solution_id=%d LIMIT 1",
-        result, time, memory, pass_rate, solution_id);
-  } else {
-    sql_len = snprintf(sql, BUFFER_SIZE,
-                       "UPDATE solution SET result=%d, time=%d, memory=%d "
+  sql_len = snprintf(sql, BUFFER_SIZE,
+                       "UPDATE solution SET result=%d, time=%.5f, memory=%d "
                        "WHERE solution_id=%d LIMIT 1",
                        result, time, memory, solution_id);
-  }
 
   if (sql_len < 0 || sql_len >= BUFFER_SIZE) {
     write_log("Error: SQL buffer overflow detected.");
     return;
   }
-
+  write_log("%s", sql);
   if (mysql_real_query(conn, sql, sql_len)) {
     write_log("MySQL Error: %s", mysql_error(conn));
     return;
@@ -231,7 +220,7 @@ void _update_solution_mysql(int solution_id, int result, int time, int memory,
   }
 }
 
-void update_solution(int solution_id, int result, int time, int memory, int sim,
+void update_solution(int solution_id, int result, double time, int memory, int sim,
                      int sim_s_id, double pass_rate) {
   if (result == OJ_TL && memory == 0) {
     result = OJ_ML;
@@ -710,12 +699,14 @@ void prepare_files(char *filename, int namelen, char *infile, int &p_id,
   fname[namelen] = 0;
   sprintf(infile, "%s/data/%d/%s.in", oj_home, p_id, fname);
   execute_cmd("/bin/cp %s %s/data.in", infile, work_dir);
-  execute_cmd("/bin/cp %s/data/%d/*.dic %s/", oj_home, p_id, work_dir);
 
   sprintf(outfile, "%s/data/%d/%s.out", oj_home, p_id, fname);
   sprintf(userfile, "%s/run%d/user.out", oj_home, runner_id);
 }
 
+void prepare_file_special_judge (int &p_id, char *work_dir) {
+  execute_cmd("/bin/cp %s/data/%d/*.dic %s/", oj_home, p_id, work_dir);
+}
 void run_solution(int &lang, const char *work_dir, int &time_limit,
                   int &usedtime, int &mem_lmt) {
   nice(19);
@@ -1274,16 +1265,6 @@ int main(int argc, char **argv) {
     mem_lmt = 1024;
   }
 
-  if (DEBUG) {
-    write_log("Time Limit=%d Mem=%d", time_limit, mem_lmt);
-    write_log("Time Limit=%d Mem=%d", time_limit, mem_lmt);
-    write_log("Time Limit=%d Mem=%d", time_limit, mem_lmt);
-    write_log("Time Limit=%d Mem=%d", time_limit, mem_lmt);
-    write_log("Time Limit=%d Mem=%d", time_limit, mem_lmt);
-    write_log("Time Limit=%d Mem=%d", time_limit, mem_lmt);
-    write_log("Time Limit=%d Mem=%d", time_limit, mem_lmt);
-  }
-
   int Compile_OK = compile(lang, work_dir);
 
   if (DEBUG) {
@@ -1384,8 +1365,11 @@ int main(int argc, char **argv) {
     }
   }
 
-  double max_case_time_ms = max_case_time / 1000000.0;
-  write_log("max_case_time %.3f seconds", max_case_time_ms);
+  double max_case_time_ms = (double)max_case_time / 1000000.0;
+
+  if (DEBUG) {
+    write_log("Time Limit Problem=%d Mem=%d, time limite user=%.5f\n\n", time_limit, mem_lmt, max_case_time_ms);
+  }
 
   if (ACflg == OJ_AC && PEflg == OJ_PE) {
     ACflg = OJ_PE;
@@ -1393,6 +1377,7 @@ int main(int argc, char **argv) {
 
   if (sim_enable && ACflg == OJ_AC && finalACflg == OJ_AC) {
     get_sim(solution_id, lang, p_id, sim_s_id);
+
     if (contest_id > 0) {
       save_contest_solution(solution_id, lang, p_id, contest_id);
       Similar_Code resul_sim =
@@ -1407,14 +1392,10 @@ int main(int argc, char **argv) {
   }
 
   if (ACflg == OJ_TL) {
-    usedtime = time_limit * 1000;
+    max_case_time_ms = time_limit * 1000000.0;
   }
 
-  if (DEBUG) {
-    write_log("The solution_id=%d time used=%f", solution_id, usedtime);
-  }
-
-  update_solution(solution_id, ACflg, usedtime, topmemory >> 10, sim, sim_s_id,
+  update_solution(solution_id, ACflg, max_case_time_ms, topmemory >> 10, sim, sim_s_id,
                   0);
 
   if (ACflg == OJ_PE) {
