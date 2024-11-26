@@ -2,9 +2,9 @@ name: OnlineJudge - kernel
 on:
   push:
     branches:
-      - master
+      - develop
   pull_request:
-    branches: 'master'
+    branches: 'develop'
 
 jobs:
   docker-package:
