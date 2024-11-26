@@ -10,7 +10,7 @@ trap "pkill judged; exit 0" SIGTERM SIGINT
 case "${1:-''}" in
 'start')
     echo "Starting judged..."
-    /usr/bin/judged /home/judge true true true
+    /usr/bin/judged
     ;;
 'stop')
     echo "Stopping judged..."
