@@ -1,4 +1,4 @@
-# Patito Kernel is fork of Hustoj
+# Patito Kernel is was a fork of Hustoj
 
 Judge, Judge_client and sim kernel of Patito Judge
 
@@ -52,11 +52,11 @@ Multi:judge_client solution_id runner_id judge_base_path.
 Debug:judge_client solution_id runner_id judge_base_path debug.
 ```
 
-<https://github.com/DaveGamble/cJSON>
-cd cJSON
-mkdir build
-cd build
-cmake .. -DCMAKE_INSTALL_PREFIX=/usr
-make
-sudo make install
-libcurl4-openssl-dev
+<https://github.com/DaveGamble/cJSON>  
+cd cJSON  
+mkdir build 
+cd build  
+cmake .. -DCMAKE_INSTALL_PREFIX=/usr 
+make  
+sudo make install  
+libcurl4-openssl-dev  
