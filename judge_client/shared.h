@@ -8,7 +8,7 @@
 #define STD_T_LIM 2
 #define STD_F_LIM (STD_MB << 5)
 #define STD_M_LIM (STD_MB << 7)
-#define BUFFER_SIZE 512
+#define BUFFER_SIZE 2048
 #define BUFFER_CODE_SIZE 5000
 #define ZOJ_COM
 
@@ -32,17 +32,12 @@
 #define OJ_CO 12
 #define OJ_TR 13
 
-#ifdef __i386
-#define REG_SYSCALL orig_eax
-#define REG_RET eax
-#define REG_ARG0 ebx
-#define REG_ARG1 ecx
-#else
+#define CALL_ARRAY_SIZE 512
+
 #define REG_SYSCALL orig_rax
 #define REG_RET rax
 #define REG_ARG0 rdi
 #define REG_ARG1 rsi
-#endif
 
 extern int DEBUG;
 extern char host_name[BUFFER_SIZE];
@@ -58,8 +53,8 @@ extern int max_running;
 extern int sleep_time;
 extern int java_time_bonus;
 extern int java_memory_bonus;
-extern char java_xms[BUFFER_SIZE];
-extern char java_xmx[BUFFER_SIZE];
+extern char java_xms[16];
+extern char java_xmx[16];
 extern int sim_enable;
 extern bool oi_mode;
 extern int use_max_time;
@@ -70,10 +65,24 @@ extern double cpu_compensation;
 extern MYSQL *conn;
 
 extern char lang_ext[21][8];
+extern char LANG_NAME[BUFFER_SIZE];
+
+extern int call_counter[CALL_ARRAY_SIZE];
 
 void write_log(const char *_fmt, ...);
 int execute_cmd(const char *fmt, ...);
 void print_runtimeerror(char *err);
 FILE *read_cmd_output(const char *fmt, ...);
+char *escape_string(const char *input);
+int after_equal(const char *c);
+bool read_buf(char *buf, const char *key, char *value);
+void read_double(char *buf, const char *key, double *value);
+void read_int(char *buf, const char *key, int *value);
+int isInFile(const char fname[]);
+void trim(char *c);
+const char *getFileNameFromPath(const char *path);
+void delnextline(char s[]);
+void stabilize_cpu();
+void print_call_array();
 
 #endif

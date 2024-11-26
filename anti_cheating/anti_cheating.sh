@@ -1,5 +1,4 @@
 #!/bin/bash
-
 if [ $# -ne 5 ]; then
     echo "Use: $0 <WORK_DIR> <SOLUTION_ID> <CONTEST_ID> <LANG> <PROBLEM_ID>"
     exit 1
@@ -27,7 +26,9 @@ if [ "$file_count" -eq 1 ]; then
     exit 0
 fi
 
-docker run --user root -v "$PWD:/dolos" --rm --entrypoint "/bin/sh" ghcr.io/dodona-edu/dolos-cli:2.7.1 -c "cd /dolos && dolos *$LANG" > $TMP_DIR/problem/$PROBLEM_ID/salida.txt
+source /opt/nvm/nvm.sh
+
+/opt/nvm/versions/node/v23.3.0/bin/dolos run * > $TMP_DIR/problem/$PROBLEM_ID/salida.txt
 
 output=$(cat $TMP_DIR/problem/$PROBLEM_ID/salida.txt | grep $SOLUTION_ID | head -n 1 | awk '{print $1,$2,$3}')
 IFS=' ' read -r first_param second_param third_param <<< "$output"

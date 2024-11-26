@@ -14,6 +14,7 @@ chmod +x judged
 cp -f  judged /usr/bin/
 
 cd ../judge_client
+cd judge_client
 make clean
 make
 chmod +x judge_client
