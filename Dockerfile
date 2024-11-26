@@ -1,5 +1,8 @@
 FROM ubuntu:latest
 
+LABEL maintainer="Samuel Loza <samuel.loza26@gmail.com>"
+LABEL version="1.0"
+
 ENV DEBIAN_FRONTEND=noninteractive
 
 WORKDIR /usr/src/app/onlinejudge-kernel
