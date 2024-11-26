@@ -10,7 +10,7 @@ jobs:
   docker-package:
     runs-on: ubuntu-latest 
     permissions: write-all
-    if: ${{github.ref == 'refs/heads/master'}}
+    if: ${{github.ref == 'refs/heads/develop'}}
     steps:
     - uses: actions/checkout@v4
     - name: Login to Registry
