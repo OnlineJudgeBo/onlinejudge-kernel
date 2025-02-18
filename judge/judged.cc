@@ -424,8 +424,8 @@ int main(int argc, char **argv)
     else
         strcpy(oj_home, JUDGEHOME);
     chdir(oj_home); // change the dir
-    if (!DEBUG)
-        daemon_init();
+    //if (!DEBUG)
+    //    daemon_init();
     if (strcmp(oj_home, JUDGEHOME) == 0 && already_running())
     {
         syslog(LOG_ERR | LOG_DAEMON, "This daemon program is already running!\n");

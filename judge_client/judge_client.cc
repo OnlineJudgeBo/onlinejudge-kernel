@@ -405,6 +405,7 @@ int compare_zoj(const char *file1, const char *file2)
     if (!f1 || !f2)
     {
         ret = OJ_RE;
+        printf("Error open files %s %s \n", *file1, *file2);
     }
     else
         for (;;)
@@ -552,14 +553,19 @@ void _update_solution_mysql(int solution_id, int result, int time, int memory,
     {
     }
 
-    if (sim)
+
+    if (solution_id > 0 && sim_s_id > 0 && sim > 0)
     {
         char sql[BUFFER_SIZE];
-        sprintf(sql,
-        "INSERT INTO `similar_code` (`solution_id`, `similar_s_id`, `percentage`) VALUES (%d, '%d', '%d') ON DUPLICATE KEY UPDATE `solution_id`='%d', `similar_s_id`='%d'",
-        solution_id, sim_s_id, sim, solution_id, sim_s_id);
+        snprintf(sql, BUFFER_SIZE,
+            "INSERT INTO `similar_code` (`solution_id`, `similar_s_id`, `percentage`) "
+            "VALUES (%d, %d, %d) "
+            "ON DUPLICATE KEY UPDATE `similar_s_id` = %d, `percentage` = %d",
+            solution_id, sim_s_id, sim, sim_s_id, sim);
+
         if (mysql_real_query(conn, sql, strlen(sql)))
         {
+//            fprintf(stderr, "MySQL Error: %s\n", mysql_error(conn));
         }
     }
 }
@@ -1978,7 +1984,7 @@ int main(int argc, char **argv)
 
     if (shm_run)
         mk_shm_workdir(work_dir);
-
+    DEBUG=true;
     chdir(work_dir);
     if (!DEBUG)
         clean_workdir(work_dir);
