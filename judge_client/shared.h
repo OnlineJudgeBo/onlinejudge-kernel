@@ -17,6 +17,7 @@
 #define JUDGEHOME "/home/judge/"
 #define JUDGELOG "/home/judge/log/client.log"
 
+#define ZOJ_COM
 #define OJ_WT0 0
 #define OJ_WT1 1
 #define OJ_CI 2
