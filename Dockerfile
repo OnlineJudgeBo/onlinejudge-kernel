@@ -54,7 +54,9 @@ RUN git clone https://github.com/DaveGamble/cJSON.git /tmp/cJSON && \
 
 RUN useradd -m -u 1536 -s /bin/bash judge
 
-COPY --chown=judge:judge . /usr/src/app/onlinejudge-kernel
+COPY . /usr/src/app/onlinejudge-kernel
+
+RUN chown -R judge:judge /usr/src/app/onlinejudge-kernel
 
 RUN cd /usr/src/app/onlinejudge-kernel && ./install.sh
 
