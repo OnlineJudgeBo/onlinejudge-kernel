@@ -68,12 +68,12 @@ ENV HOME=/home/judge
 ENV CONF=/home/judge/etc/judge.conf
 
 COPY ./docker/entrypoint.sh /usr/local/bin/entrypoint.sh
+
 RUN chmod +x /usr/local/bin/entrypoint.sh
 
+RUN rm -rf /usr/src/app/onlinejudge-kernel
 
 USER judge
-
-RUN rm -rf /usr/src/app/onlinejudge-kernel
 
 WORKDIR /home/judge
 
