@@ -52,6 +52,8 @@ RUN git clone https://github.com/DaveGamble/cJSON.git /tmp/cJSON && \
     make && make install && \
     rm -rf /tmp/cJSON
 
+RUN useradd -m -u 1536 -s /bin/bash judge
+
 COPY --chown=judge:judge . /usr/src/app/onlinejudge-kernel
 
 RUN cd /usr/src/app/onlinejudge-kernel && ./install.sh
@@ -66,7 +68,6 @@ ENV CONF=/home/judge/etc/judge.conf
 COPY ./docker/entrypoint.sh /usr/local/bin/entrypoint.sh
 RUN chmod +x /usr/local/bin/entrypoint.sh
 
-RUN useradd -m -u 1536 -s /bin/bash judge
 
 USER judge
 
