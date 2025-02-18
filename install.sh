@@ -10,7 +10,7 @@ service judged stop || true
 cd $PWD/judge
 make
 chmod +x judged
-cp -f  judged /usr/bin
+cp -f  judged /usr/bin/
 
 cd ../judge_client
 make clean

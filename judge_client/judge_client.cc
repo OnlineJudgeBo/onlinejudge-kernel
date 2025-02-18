@@ -385,7 +385,7 @@ void make_diff_out(const char *file1, const char *file2, int c1, int c2, const c
     if (limi < 0)
         fprintf(out, "%s", "\n...\n");
     fprintf(out, "\n=================\n");
-    fprintf(out, "\nEste modulo esta en modo beta. No se confie \n");
+    fprintf(out, "\nEste modulo esta en modo beta. No se confié \n");
     fprintf(out, "\nDato esperado '%c', Tu salida '%c'. \n", c1, c2);
     fclose(out);
 }
@@ -457,6 +457,8 @@ int compare_zoj(const char *file1, const char *file2)
 end:
     if (ret == OJ_WA)
         make_diff_out(file1, file2, c1, c2, file1);
+    if (ret == OJ_PE)
+        make_diff_out(file1, file2, c1, c2, file1);
     if (f1)
         fclose(f1);
     if (f2)
@@ -474,63 +476,10 @@ void delnextline(char s[])
 
 int compare(const char *file1, const char *file2)
 {
-#ifdef ZOJ_COM
     // compare ported and improved from zoj don't limit file size
     if (DEBUG)
         printf("Compile end! and Compare ZOj init\n");
     return compare_zoj(file1, file2);
-#endif
-#ifndef ZOJ_COM
-    // the original compare from the first version of hustoj has file size limit
-    // and waste memory
-    FILE *f1, *f2;
-    char *s1, *s2, *p1, *p2;
-    int PEflg;
-    s1 = new char[STD_F_LIM + 512];
-    s2 = new char[STD_F_LIM + 512];
-    if (!(f1 = fopen(file1, "r")))
-        return OJ_AC;
-    for (p1 = s1; EOF != fscanf(f1, "%s", p1);)
-        while (*p1)
-            p1++;
-    fclose(f1);
-    if (!(f2 = fopen(file2, "r")))
-        return OJ_RE;
-    for (p2 = s2; EOF != fscanf(f2, "%s", p2);)
-        while (*p2)
-            p2++;
-    fclose(f2);
-    if (strcmp(s1, s2) != 0)
-    {
-        delete[] s1;
-        delete[] s2;
-
-        return OJ_WA;
-    }
-    else
-    {
-        f1 = fopen(file1, "r");
-        f2 = fopen(file2, "r");
-        PEflg = 0;
-        while (PEflg == 0 && fgets(s1, STD_F_LIM, f1) && fgets(s2, STD_F_LIM, f2))
-        {
-            delnextline(s1);
-            delnextline(s2);
-            if (strcmp(s1, s2) == 0)
-                continue;
-            else
-                PEflg = 1;
-        }
-        delete[] s1;
-        delete[] s2;
-        fclose(f1);
-        fclose(f2);
-        if (PEflg)
-            return OJ_PE;
-        else
-            return OJ_AC;
-    }
-#endif
 }
 
 void _update_solution_mysql(int solution_id, int result, int time, int memory,
@@ -573,7 +522,6 @@ void _update_solution_mysql(int solution_id, int result, int time, int memory,
 void update_solution(int solution_id, int result, int time, int memory, int sim,
                      int sim_s_id, double pass_rate)
 {
-    printf("+++++++++++++++++++++++++++%d", result);
     if (result == OJ_TL && memory == 0)
         result = OJ_ML;
     _update_solution_mysql(solution_id, result, time, memory, sim, sim_s_id, pass_rate);
@@ -631,6 +579,7 @@ void addceinfo(int solution_id)
 /* write runtime error message back to database */
 void _addreinfo_mysql(int solution_id, const char *filename)
 {
+    printf("Deleting reinfo solution_id=%d, filename=%s\n", solution_id, filename);
     char sql[(1 << 16)], *end;
     char reinfo[(1 << 16)], *rend;
     FILE *fp = fopen(filename, "r");
@@ -654,6 +603,7 @@ void _addreinfo_mysql(int solution_id, const char *filename)
     }
     *rend = '\0';
 
+    printf("Adding reinfo solution_id=%d\n", solution_id);
     end = sql;
     strcpy(end, "INSERT INTO runtimeinfo VALUES(");
     end += strlen("INSERT INTO runtimeinfo VALUES(");
@@ -672,6 +622,7 @@ void _addreinfo_mysql(int solution_id, const char *filename)
     }
 
     fclose(fp);
+    printf("End reinfo solution_id=%d\n", solution_id);
 }
 
 void addreinfo(int solution_id)
@@ -1768,7 +1719,16 @@ void save_contest_solution(int solution_id, int lang, int pid, int contest_id)
     execute_cmd("/bin/mkdir -p ../data/contests/%d/problem/%d", contest_id, pid);
     execute_cmd("/bin/cp %s ../data/contests/%d/problem/%d/%d.%s", src_pth, contest_id, pid, solution_id, lang_ext[lang]);
 }
-
+/**
+ * @brief Get percent of similar code
+ * 
+ * @param solution_id 
+ * @param lang 
+ * @param p_id 
+ * @param contest_id 
+ * @param work_dir 
+ * @return percentage of Similar_Code 
+ */
 Similar_Code get_similar_code(int solution_id, int lang, int p_id, int contest_id, char *work_dir)
 {
     char cmd[BUFFER_SIZE];
@@ -1789,6 +1749,7 @@ Similar_Code get_similar_code(int solution_id, int lang, int p_id, int contest_i
 
     if (sscanf(output, "%d%*[^,],%d%*[^,],%lf", &first_number, &second_number, &third_number) != 3) {
         printf("Error reading command output\n");
+        printf("%s", output);
     }
 
     Similar_Code similar;
@@ -2197,14 +2158,17 @@ int main(int argc, char **argv)
             printf("add RE Line 2130 info of %d..... \n", solution_id);
         addreinfo(solution_id);
     }
+
     if (use_max_time)
     {
         usedtime = max_case_time;
     }
+
     if (ACflg == OJ_TL)
     {
         usedtime = time_lmt * 1000;
     }
+
     if (oi_mode)
     {
         if (num_of_test > 0)
@@ -2215,6 +2179,7 @@ int main(int argc, char **argv)
     {
         update_solution(solution_id, ACflg, usedtime, topmemory >> 10, sim, sim_s_id, 0);
     }
+
     if ((oi_mode && finalACflg == OJ_WA) || ACflg == OJ_WA)
     {
         if (DEBUG)
@@ -2222,7 +2187,16 @@ int main(int argc, char **argv)
         if (!isspj)
             adddiffinfo(solution_id);
     }
+
+    if (ACflg == OJ_PE)
+    {
+        adddiffinfo(solution_id);
+    }
+
+    printf("Adding user information user_id=%s\n", user_id);
     update_user(user_id);
+
+    printf("Updating problem information p_id=%d\n", p_id);
     update_problem(p_id);
     clean_workdir(work_dir);
 
@@ -2237,7 +2211,7 @@ int main(int argc, char **argv)
     }
 
     if (DEBUG)
-        write_log("result=%d", oi_mode ? finalACflg : ACflg);
+        write_log("result=%d\n", oi_mode ? finalACflg : ACflg);
 
     mysql_close(conn);
     if (record_call)
