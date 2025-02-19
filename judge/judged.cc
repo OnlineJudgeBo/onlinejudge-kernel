@@ -285,23 +285,6 @@ bool _check_out_mysql(int solution_id, int result)
     }
 }
 
-void expire_old_solution()
-{
-    char sql[BUFFER_SIZE];
-    sprintf(sql, "UPDATE solution SET result=13, time=0, memory=0, judgetime=NOW() "
-                 "WHERE result<=3 AND TIMESTAMPDIFF(MINUTE, judgetime, NOW()) > 15");
-
-    if (mysql_real_query(conn, sql, strlen(sql))) 
-    {
-        syslog(LOG_ERR | LOG_DAEMON, "MySQL Error: %s", mysql_error(conn));
-    }
-    else 
-    {
-        long affected_rows = mysql_affected_rows(conn);
-        syslog(LOG_INFO | LOG_DAEMON, "Expired %ld old solutions", affected_rows);
-    }
-}
-
 bool check_out(int solution_id, int result)
 {
     return _check_out_mysql(solution_id, result);
@@ -452,7 +435,7 @@ int main(int argc, char **argv)
     // final_sleep.tv_sec=0;
     // final_sleep.tv_nsec=500000000;
     init_mysql_conf(); // set the database info
-    expire_old_solution();
+    //expire_old_solution();
     signal(SIGQUIT, call_for_exit);
     signal(SIGKILL, call_for_exit);
     signal(SIGTERM, call_for_exit);
