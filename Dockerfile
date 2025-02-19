@@ -4,10 +4,11 @@ LABEL maintainer="Samuel Loza <samuel.loza26@gmail.com>"
 LABEL version="1.0"
 
 ENV DEBIAN_FRONTEND=noninteractive
+ENV PYTHON_VERSION=3.12.0
 
 WORKDIR /usr/src/app/onlinejudge-kernel
 
-RUN apt update && apt install -y \
+RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     make \
     flex \
@@ -24,9 +25,35 @@ RUN apt update && apt install -y \
     gnupg2 \
     locales \
     nano \
-    && rm -rf /var/lib/apt/lists/*
+    libssl-dev \
+    zlib1g-dev \
+    libncurses5-dev \
+    libncursesw5-dev \
+    libreadline-dev \
+    libsqlite3-dev \
+    libgdbm-dev \
+    libdb5.3-dev \
+    libbz2-dev \
+    libexpat1-dev \
+    liblzma-dev \
+    libffi-dev \
+    uuid-dev && \
+    apt-get clean && rm -rf /var/lib/apt/lists/*
+
 
 RUN locale-gen es_ES.UTF-8 && update-locale LANG=es_ES.UTF-8
+
+# Instalar Python
+RUN wget https://www.python.org/ftp/python/$PYTHON_VERSION/Python-$PYTHON_VERSION.tgz && \
+    tar xvf Python-$PYTHON_VERSION.tgz && \
+    cd Python-$PYTHON_VERSION && \
+    ./configure --enable-optimizations && \
+    make -j$(nproc) && \
+    make altinstall && \
+    cd .. && rm -rf Python-$PYTHON_VERSION*
+
+# Verifica la instalación
+RUN python3.12 --version
 
 # Instalar Adoptium JDK 8
 RUN mkdir -p /etc/apt/keyrings && \

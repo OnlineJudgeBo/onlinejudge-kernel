@@ -1,5 +1,5 @@
 /*
- * 
+ *
  *
  * This file is part of HUSTOJ.
  *
@@ -37,7 +37,7 @@ int LANG_JV[512] = {
 int LANG_GOV[512] = {
         0, 3, 35,511, SYS_write, SYS_mprotect, SYS_munmap, SYS_rt_sigaction, SYS_sigaltstack, SYS_rt_sigprocmask,
         SYS_arch_prctl, SYS_pread64, SYS_gettid, SYS_futex, SYS_sched_getaffinity, SYS_clock_gettime, SYS_exit_group,
-        SYS_sched_yield, SYS_openat, SYS_readlinkat, SYS_clone, SYS_execve, SYS_fcntl, SYS_mmap, 0 };				
+        SYS_sched_yield, SYS_openat, SYS_readlinkat, SYS_clone, SYS_execve, SYS_fcntl, SYS_mmap, 0 };
 //python
 int LANG_PY3[512] = {
         0,1,2,3,4,5,6,8,9,10,11,12,13,14,16,17,21,32,39,41,42,49,59,72,78,79,89,97,99,102,104,106,107,108,131,137,158,186,202,217,218,228,231,257,262,273,302,318,334,267,
@@ -167,4 +167,4 @@ int LANG_MV[512] = {
         SYS_lstat, SYS_uname, SYS_poll, SYS_fcntl, SYS_getdents, SYS_getcwd, SYS_lseek, SYS_readlink, SYS_mmap,
         SYS_gettimeofday, 0 };
 //Cobal
-int LANG_CBV[512]={0,1,3,4,5,8,9,10,11,12,13,14,17,21,41,42,59,89,158,202,218,231,257,273,302,0};				
+int LANG_CBV[512]={0,1,3,4,5,8,9,10,11,12,13,14,17,21,41,42,59,89,158,202,218,231,257,273,302,0};
