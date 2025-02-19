@@ -160,7 +160,7 @@ void init_mysql_conf()
         }
         sleep_tmp = sleep_time;
     }
-    sprintf(query, "SELECT solution_id FROM solution WHERE language in (%s) and result < 2 AND in_date >= NOW() - INTERVAL 180 MINUTE ORDER BY solution_id ASC limit %d", oj_lang_set, max_running * 2);
+    sprintf(query, "SELECT solution_id FROM solution WHERE language in (%s) and result < 2  ORDER BY solution_id ASC limit %d", oj_lang_set, max_running * 2);
     if (DEBUG)
     {
         write_log("%s", query);
