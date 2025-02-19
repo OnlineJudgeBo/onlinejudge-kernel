@@ -451,8 +451,8 @@ int main(int argc, char **argv)
     // struct timespec final_sleep;
     // final_sleep.tv_sec=0;
     // final_sleep.tv_nsec=500000000;
-    expire_old_solution();
     init_mysql_conf(); // set the database info
+    expire_old_solution();
     signal(SIGQUIT, call_for_exit);
     signal(SIGKILL, call_for_exit);
     signal(SIGTERM, call_for_exit);
