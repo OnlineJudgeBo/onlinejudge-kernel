@@ -25,6 +25,6 @@ chmod +x  /etc/init.d/judged
 ln -sf /etc/init.d/judged /etc/rc3.d/S93judged
 ln -sf /etc/init.d/judged /etc/rc2.d/S93judged
 
-systemctl daemon-reload  || true
-service judged start  || true
+#systemctl daemon-reload  || true
+#service judged start  || true
 
