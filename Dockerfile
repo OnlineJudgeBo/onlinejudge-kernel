@@ -44,7 +44,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 RUN locale-gen es_ES.UTF-8 && update-locale LANG=es_ES.UTF-8
 
 # Instalar Python
-RUN wget https://www.python.org/ftp/python/$PYTHON_VERSION/Python-$PYTHON_VERSION.tgz && \
+RUN wget --no-check-certificate https://www.python.org/ftp/python/$PYTHON_VERSION/Python-$PYTHON_VERSION.tgz && \
     tar xvf Python-$PYTHON_VERSION.tgz && \
     cd Python-$PYTHON_VERSION && \
     ./configure --enable-optimizations && \
