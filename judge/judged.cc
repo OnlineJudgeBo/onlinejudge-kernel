@@ -160,10 +160,27 @@ void init_mysql_conf()
         }
         sleep_tmp = sleep_time;
     }
-    sprintf(query, "SELECT solution_id FROM solution WHERE language in (%s) and result < 2 AND TIMESTAMPDIFF(MINUTE, in_date, NOW()) BETWEEN 0 AND 15 ORDER BY solution_id ASC limit %d", oj_lang_set, max_running * 2);
+    sprintf(query, "SELECT solution_id FROM solution WHERE language in (%s) and result < 2 AND in_date >= NOW() - INTERVAL 15 MINUTE ORDER BY solution_id ASC limit %d", oj_lang_set, max_running * 2);
     if (DEBUG)
     {
         write_log("%s", query);
+    }
+}
+
+void expire_old_solution()
+{
+    char sql[BUFFER_SIZE];
+    sprintf(sql, "UPDATE solution SET result=13, time=0, memory=0, judgetime=NOW() "
+                 "WHERE result<=3 AND TIMESTAMPDIFF(MINUTE, judgetime, NOW()) > 15");
+
+    if (mysql_real_query(conn, sql, strlen(sql))) 
+    {
+        syslog(LOG_ERR | LOG_DAEMON, "MySQL Error: %s", mysql_error(conn));
+    }
+    else 
+    {
+        long affected_rows = mysql_affected_rows(conn);
+        syslog(LOG_INFO | LOG_DAEMON, "Expired %ld old solutions", affected_rows);
     }
 }
 
