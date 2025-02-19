@@ -37,7 +37,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libexpat1-dev \
     liblzma-dev \
     libffi-dev \
-    uuid-dev && \
+    uuid-dev ca-certificates && \
     apt-get clean && rm -rf /var/lib/apt/lists/*
 
 
@@ -57,10 +57,11 @@ RUN python3.12 --version
 
 # Instalar Adoptium JDK 8
 RUN mkdir -p /etc/apt/keyrings && \
-    curl -fsSL https://packages.adoptium.net/artifactory/api/gpg/key/public | tee /etc/apt/keyrings/adoptium.asc && \
-    echo "deb [signed-by=/etc/apt/keyrings/adoptium.asc] https://packages.adoptium.net/artifactory/deb $(awk -F= '/^VERSION_CODENAME/{print $2}' /etc/os-release) main" | \
-    tee /etc/apt/sources.list.d/adoptium.list && \
-    apt update && apt install -y temurin-8-jdk && rm -rf /var/lib/apt/lists/*
+    curl -fsSL --insecure https://packages.adoptium.net/artifactory/api/gpg/key/public | tee /etc/apt/keyrings/adoptium.asc && \
+    echo "deb [signed-by=/etc/apt/keyrings/adoptium.asc] https://packages.adoptium.net/artifactory/deb $(awk -F= '/^VERSION_CODENAME/{print $2}' /etc/os-release) main" | tee /etc/apt/sources.list.d/adoptium.list && \
+    apt-get update && \
+    apt-get install -y temurin-8-jdk && \
+    rm -rf /var/lib/apt/lists/*
 
 RUN update-alternatives --set java /usr/lib/jvm/temurin-8-jdk-amd64/bin/java && \
     update-alternatives --set javac /usr/lib/jvm/temurin-8-jdk-amd64/bin/javac
