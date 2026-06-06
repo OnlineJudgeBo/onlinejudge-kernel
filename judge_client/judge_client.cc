@@ -125,6 +125,7 @@ void init_syscalls_limits(int lang)
     { // Java
         for (i = 0; i == 0 || LANG_JV[i]; i++)
             call_counter[LANG_JV[i]] = HOJ_MAX_LIMIT;
+        call_counter[SYS_madvise] = HOJ_MAX_LIMIT; //more details next deploy
     }
     else if (lang == 4)
     { // Ruby
@@ -976,6 +977,71 @@ void get_problem_info(int p_id, int &time_lmt, int &mem_lmt, int &isspj)
     _get_problem_info_mysql(p_id, time_lmt, mem_lmt, isspj);
     if (time_lmt <= 0)
         time_lmt = 1;
+}
+
+void write_text_file(const char *filename, const char *content)
+{
+    FILE *fp = fopen(filename, "w");
+    if (fp == NULL)
+        return;
+    if (content != NULL)
+        fprintf(fp, "%s", content);
+    fclose(fp);
+}
+
+bool is_custom_input(int solution_id)
+{
+    char sql[BUFFER_SIZE];
+    MYSQL_RES *res;
+    MYSQL_ROW row;
+    sprintf(sql, "SELECT solution_id FROM custom_input WHERE solution_id=%d LIMIT 1", solution_id);
+    if (mysql_real_query(conn, sql, strlen(sql)))
+        return false;
+    res = mysql_store_result(conn);
+    row = mysql_fetch_row(res);
+    bool found = row != NULL;
+    mysql_free_result(res);
+    return found;
+}
+
+int custom_input_case_count(int solution_id)
+{
+    char sql[BUFFER_SIZE];
+    MYSQL_RES *res;
+    MYSQL_ROW row;
+    sprintf(sql, "SELECT COUNT(*) FROM custom_input_case WHERE solution_id=%d", solution_id);
+    if (mysql_real_query(conn, sql, strlen(sql)))
+        return 0;
+    res = mysql_store_result(conn);
+    row = mysql_fetch_row(res);
+    int count = row ? atoi(row[0]) : 0;
+    mysql_free_result(res);
+    return count;
+}
+
+bool prepare_custom_input_case(int solution_id, int case_number, bool &has_expected)
+{
+    char sql[BUFFER_SIZE];
+    MYSQL_RES *res;
+    MYSQL_ROW row;
+    sprintf(sql, "SELECT input_text, expected_output FROM custom_input_case WHERE solution_id=%d AND case_number=%d LIMIT 1", solution_id, case_number);
+    if (mysql_real_query(conn, sql, strlen(sql)))
+        return false;
+    res = mysql_store_result(conn);
+    row = mysql_fetch_row(res);
+    if (row == NULL)
+    {
+        mysql_free_result(res);
+        return false;
+    }
+
+    write_text_file("data.in", row[0] ? row[0] : "");
+    has_expected = row[1] != NULL;
+    if (has_expected)
+        write_text_file("expected.out", row[1]);
+
+    mysql_free_result(res);
+    return true;
 }
 
 void prepare_files(char *filename, int namelen, char *infile, int &p_id,
@@ -1951,6 +2017,7 @@ int main(int argc, char **argv)
         clean_workdir(work_dir);
 
     get_solution_info(solution_id, p_id, user_id, lang, is_remote_id, contest_id);
+    bool custom_input = is_custom_input(solution_id);
 
     if (p_id == 0)
     {
@@ -1987,8 +2054,11 @@ int main(int argc, char **argv)
     {
         addceinfo(solution_id);
         update_solution(solution_id, OJ_CE, 0, 0, 0, 0, 0.0);
-        update_user(user_id);
-        update_problem(p_id);
+        if (!custom_input)
+        {
+            update_user(user_id);
+            update_problem(p_id);
+        }
         mysql_close(conn);
 
         if (!DEBUG)
@@ -2010,7 +2080,7 @@ int main(int argc, char **argv)
     DIR *dp;
     dirent *dirp;
 
-    if (p_id > 0 && (dp = opendir(fullpath)) == NULL)
+    if (!custom_input && p_id > 0 && (dp = opendir(fullpath)) == NULL)
     {
 
         write_log("No such dir:%s!\n", fullpath);
@@ -2045,6 +2115,61 @@ int main(int argc, char **argv)
     double pass_rate = 0.0;
     int num_of_test = 0;
     int finalACflg = ACflg;
+    if (custom_input)
+    {
+        printf("running custom_input...\n");
+        int case_count = custom_input_case_count(solution_id);
+        if (case_count <= 0)
+            case_count = 1;
+
+        for (int case_number = 1; case_number <= case_count && ACflg == OJ_AC; case_number++)
+        {
+            bool has_expected = false;
+            if (!prepare_custom_input_case(solution_id, case_number, has_expected))
+                write_text_file("data.in", "");
+
+            strcpy(infile, "data.in");
+            strcpy(outfile, has_expected ? "expected.out" : "user.out");
+            strcpy(userfile, "user.out");
+            write_text_file("error.out", "");
+            write_text_file("user.out", "");
+
+            init_syscalls_limits(lang);
+            pid_t pidApp = fork();
+            if (pidApp == 0)
+            {
+                run_solution(lang, work_dir, time_lmt, usedtime, mem_lmt);
+                exit(0);
+            }
+            else
+            {
+                watch_solution(pidApp, infile, ACflg, isspj, userfile, outfile,
+                               solution_id, lang, topmemory, mem_lmt, usedtime, time_lmt,
+                               p_id, PEflg, work_dir);
+            }
+
+            if (has_expected)
+            {
+                judge_solution(ACflg, usedtime, time_lmt, 0, p_id, infile,
+                               outfile, userfile, PEflg, lang, work_dir, topmemory,
+                               mem_lmt, solution_id, 1.0);
+            }
+        }
+
+        if (ACflg == OJ_TL)
+            usedtime = time_lmt * 1000;
+        if (ACflg == OJ_RE)
+            addreinfo(solution_id);
+        else if (ACflg == OJ_WA || ACflg == OJ_PE)
+            adddiffinfo(solution_id);
+        else
+            addcustomout(solution_id);
+
+        update_solution(solution_id, ACflg == OJ_AC ? OJ_TR : ACflg, usedtime, topmemory >> 10, 0, 0, 0);
+        mysql_close(conn);
+        exit(0);
+    }
+
     if (p_id == 0)
     {
         printf("running a custom input...\n");
