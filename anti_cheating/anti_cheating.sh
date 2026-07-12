@@ -1,4 +1,5 @@
 #!/bin/bash
+set -euo pipefail
 
 if [ $# -ne 5 ]; then
     echo "Use: $0 <WORK_DIR> <SOLUTION_ID> <CONTEST_ID> <LANG> <PROBLEM_ID>"
@@ -11,41 +12,47 @@ CONTEST_ID=$3
 LANG=$4
 PROBLEM_ID=$5
 
-TMP_DIR="/tmp/$RANDOM"
-ORIGIN_SOLUTION_PATH="$TMP_DIR/"
+TMP_DIR=$(mktemp -d /tmp/patito-anticheat.XXXXXX)
+cleanup() {
+    rm -rf "$TMP_DIR"
+}
+trap cleanup EXIT
 
-mkdir -p "$TMP_DIR/problem/$PROBLEM_ID"
+PROBLEM_TMP_DIR="$TMP_DIR/problem/$PROBLEM_ID"
+mkdir -p "$PROBLEM_TMP_DIR"
 
-cp $WORK_DIR/data/contests/$CONTEST_ID/problem/$PROBLEM_ID/*$LANG $TMP_DIR/problem/$PROBLEM_ID/
+SOURCE_DIR="$WORK_DIR/data/contests/$CONTEST_ID/problem/$PROBLEM_ID"
+shopt -s nullglob
+files=("$SOURCE_DIR"/*"$LANG")
 
-cd $TMP_DIR/problem/$PROBLEM_ID
-file_count=$(ls -1 * | wc -l)
-
-if [ "$file_count" -eq 1 ]; then
+if [ "${#files[@]}" -le 1 ]; then
     echo "0.xx,0.xx,0"
-    rm -rf $TMP_DIR
     exit 0
 fi
 
-docker run --user root -v "$PWD:/dolos" --rm --entrypoint "/bin/sh" ghcr.io/dodona-edu/dolos-cli:2.7.1 -c "cd /dolos && dolos *$LANG" > $TMP_DIR/problem/$PROBLEM_ID/salida.txt
+cp -- "${files[@]}" "$PROBLEM_TMP_DIR/"
+cd "$PROBLEM_TMP_DIR"
 
-output=$(cat $TMP_DIR/problem/$PROBLEM_ID/salida.txt | grep $SOLUTION_ID | head -n 1 | awk '{print $1,$2,$3}')
+if command -v dolos >/dev/null 2>&1; then
+    timeout 120s dolos run *"$LANG" > salida.txt || true
+else
+    docker run --user root -v "$PWD:/dolos" --rm --entrypoint "/bin/sh" ghcr.io/dodona-edu/dolos-cli:2.7.1 -c "cd /dolos && dolos *$LANG" > salida.txt || true
+fi
+
+output=$(grep -- "$SOLUTION_ID" salida.txt | head -n 1 | awk '{print $1,$2,$3}' || true)
 IFS=' ' read -r first_param second_param third_param <<< "$output"
 
-if [[ "$first_param" == *"$SOLUTION_ID"* ]]; then
-    found_param="$first_param"
-    other_param="$second_param"
+if [[ "${first_param:-}" == *"$SOLUTION_ID"* ]]; then
+    found_param=$first_param
+    other_param=${second_param:-0}
 else
-    found_param="$second_param"
-    other_param="$first_param"
+    found_param=${second_param:-0}
+    other_param=${first_param:-0}
 fi
 
-if [ -z "$third_param" ]; then
-    similarity_score=$(grep -o 'Similarity score: [0-9]*' "$TMP_DIR/problem/$PROBLEM_ID/salida.txt" | awk '{print $3}')
-    third_param=$similarity_score
+if [ -z "${third_param:-}" ]; then
+    third_param=$(grep -o 'Similarity score: [0-9]*' salida.txt | awk '{print $3}' | head -n 1 || true)
 fi
 
-result="$found_param,$other_param,$third_param"
-echo $result
-rm -rf $TMP_DIR
-exit 0
+third_param=${third_param:-0}
+printf '%s,%s,%s\n' "$found_param" "$other_param" "$third_param"
