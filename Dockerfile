@@ -47,7 +47,7 @@ RUN locale-gen es_ES.UTF-8 && update-locale LANG=es_ES.UTF-8
 RUN wget --no-check-certificate https://www.python.org/ftp/python/$PYTHON_VERSION/Python-$PYTHON_VERSION.tgz && \
     tar xvf Python-$PYTHON_VERSION.tgz && \
     cd Python-$PYTHON_VERSION && \
-    ./configure --enable-optimizations && \
+    ./configure && \
     make -j$(nproc) && \
     make altinstall && \
     cd .. && rm -rf Python-$PYTHON_VERSION*
@@ -66,12 +66,22 @@ RUN mkdir -p /etc/apt/keyrings && \
 RUN update-alternatives --set java /usr/lib/jvm/temurin-8-jdk-amd64/bin/java && \
     update-alternatives --set javac /usr/lib/jvm/temurin-8-jdk-amd64/bin/javac
 
-# Instalar NVM y Dolos
+# Instalar NVM, Node y Dolos. Symlink node/npm/dolos into /usr/local/bin so
+# non-login processes launched by judged can run anti_cheating without Docker-in-Docker.
 ARG NVM_VERSION=v0.39.7
+ARG NODE_VERSION=20
 RUN curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/$NVM_VERSION/install.sh | bash && \
     export NVM_DIR="$HOME/.nvm" && \
     [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh" && \
-    nvm install node && npm i -g dolos
+    nvm install "$NODE_VERSION" && \
+    nvm alias default "$NODE_VERSION" && \
+    npm i -g @dodona/dolos && \
+    NODE_BIN_DIR="$NVM_DIR/versions/node/$(nvm version)/bin" && \
+    ln -sf "$NODE_BIN_DIR/node" /usr/local/bin/node && \
+    ln -sf "$NODE_BIN_DIR/npm" /usr/local/bin/npm && \
+    ln -sf "$NODE_BIN_DIR/npx" /usr/local/bin/npx && \
+    ln -sf "$NODE_BIN_DIR/dolos" /usr/local/bin/dolos && \
+    node --version && npm --version && command -v dolos
 
 # Instalar cJSON
 RUN git clone https://github.com/DaveGamble/cJSON.git /tmp/cJSON && \
@@ -89,7 +99,8 @@ RUN chown -R judge:judge /usr/src/app/onlinejudge-kernel
 RUN cd /usr/src/app/onlinejudge-kernel && ./install.sh
 
 RUN chmod +x /usr/bin/pseint /usr/bin/psexport /usr/bin/anti_cheating.sh /etc/init.d/judged && \
-    mkdir -p /home/judge/ && chown -R judge:judge /home/judge/ && chmod -R 755 /home/judge/
+    mkdir -p /home/judge /var/run && \
+    chown -R judge:judge /home/judge && chmod -R 755 /home/judge
 
 ENV LANG=en_US.UTF-8
 ENV HOME=/home/judge
@@ -101,7 +112,7 @@ RUN chmod +x /usr/local/bin/entrypoint.sh
 
 RUN rm -rf /usr/src/app/onlinejudge-kernel
 
-USER judge
+USER root
 
 WORKDIR /home/judge
 

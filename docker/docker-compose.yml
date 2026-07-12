@@ -1,11 +1,16 @@
 services:
   patito-judge-kernel:
-    build: .
+    build:
+      context: ..
+      dockerfile: Dockerfile
     container_name: patito-judge-kernel
     restart: always
     labels:
       - traefik.enable=true
-    user: judge
+    user: root
+    cap_add:
+      - SYS_CHROOT
+      - SYS_PTRACE
     environment:
       LANG: "es_ES.UTF-8"
       HOME: "/home/judge"
