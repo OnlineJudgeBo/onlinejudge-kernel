@@ -112,6 +112,8 @@ RUN chmod +x /usr/local/bin/entrypoint.sh
 
 RUN rm -rf /usr/src/app/onlinejudge-kernel
 
+RUN ln -sf /usr/local/bin/python3.12 /usr/bin/python3.12
+
 USER root
 
 WORKDIR /home/judge
