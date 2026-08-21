@@ -69,7 +69,7 @@ RUN update-alternatives --set java /usr/lib/jvm/temurin-8-jdk-amd64/bin/java && 
 # Instalar NVM, Node y Dolos. Symlink node/npm/dolos into /usr/local/bin so
 # non-login processes launched by judged can run anti_cheating without Docker-in-Docker.
 ARG NVM_VERSION=v0.39.7
-ARG NODE_VERSION=20
+ARG NODE_VERSION=22
 RUN curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/$NVM_VERSION/install.sh | bash && \
     export NVM_DIR="$HOME/.nvm" && \
     [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh" && \
