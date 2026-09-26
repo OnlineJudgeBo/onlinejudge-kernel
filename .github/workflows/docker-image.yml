@@ -18,7 +18,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  IMAGE_NAME: ghcr.io/onlinejudgebo/patito-judge-kernel
+  IMAGE_NAME: ghcr.io/onlinejudgebo/onlinejudgebo-kernel
 
 jobs:
   docker-image:
@@ -40,6 +40,8 @@ jobs:
           images: ${{ env.IMAGE_NAME }}
           tags: |
             type=raw,value=master,enable=${{ github.ref == 'refs/heads/master' }}
+            # patito-production-deploy pulls this tag
+            type=raw,value=develop,enable=${{ github.ref == 'refs/heads/master' }}
             type=sha,prefix=sha-
 
       - name: Login to GitHub Container Registry
