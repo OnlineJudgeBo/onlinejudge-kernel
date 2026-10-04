@@ -1797,21 +1797,40 @@ void save_contest_solution(int solution_id, int lang, int pid, int contest_id)
  */
 Similar_Code get_similar_code(int solution_id, int lang, int p_id, int contest_id, char *work_dir)
 {
-    char cmd[BUFFER_SIZE];
-    sprintf(cmd, "/usr/bin/anti_cheating.sh %s %d %d .%s %d", oj_home, solution_id, contest_id, lang_ext[lang], p_id);
+    // Room for the user's own solution ids (~650); read_cmd_output only holds BUFFER_SIZE.
+    char cmd[BUFFER_SIZE * 16];
+    int len = snprintf(cmd, sizeof(cmd), "/usr/bin/anti_cheating.sh %s %d %d .%s %d ", oj_home, solution_id, contest_id, lang_ext[lang], p_id);
+
+    // Other solutions of the same user in this contest problem: the script leaves them out,
+    // so a submission is compared with everyone else but never with its author's own code.
+    char sql[BUFFER_SIZE];
+    sprintf(sql,
+            "SELECT solution_id FROM solution WHERE contest_id=%d AND problem_id=%d AND solution_id<>%d "
+            "AND user_id=(SELECT user_id FROM solution WHERE solution_id=%d)",
+            contest_id, p_id, solution_id, solution_id);
+    MYSQL_RES *res = mysql_real_query(conn, sql, strlen(sql)) ? NULL : mysql_store_result(conn);
+    if (res != NULL)
+    {
+        MYSQL_ROW row;
+        // 12 = longest int id plus comma and terminator.
+        while ((row = mysql_fetch_row(res)) != NULL && len + 12 < (int)sizeof(cmd))
+            len += sprintf(cmd + len, "%d,", atoi(row[0]));
+        mysql_free_result(res);
+    }
 
     int first_number;
     int second_number = 0;
     double third_number = 0.0;
-    char buffer[BUFFER_SIZE] = "";
     char output[BUFFER_SIZE] = "";
 
-    FILE *fjobs = read_cmd_output("%s", cmd);
-    
-    while (fgets(buffer, BUFFER_SIZE, fjobs) != NULL) {
-        strcat(output, buffer);
+    FILE *fjobs = popen(cmd, "r");
+    if (fjobs != NULL)
+    {
+        // The script prints a single "<file>,<file>,<score>" line.
+        if (fgets(output, BUFFER_SIZE, fjobs) == NULL)
+            output[0] = 0;
+        pclose(fjobs);
     }
-    pclose(fjobs);
 
     if (sscanf(output, "%d%*[^,],%d%*[^,],%lf", &first_number, &second_number, &third_number) != 3) {
         printf("Error reading command output\n");
@@ -1995,7 +2014,7 @@ int main(int argc, char **argv)
     char code[BUFFER_CODE_SIZE];
     int solution_id = 1000;
     int runner_id = 0;
-    int p_id, time_lmt, mem_lmt, lang, isspj, sim, sim_s_id, max_case_time = 0;
+    int p_id, time_lmt, mem_lmt, lang, isspj, sim = 0, sim_s_id = 0, max_case_time = 0;
     int contest_id = 0;
     bool is_remote_id = false;
 
