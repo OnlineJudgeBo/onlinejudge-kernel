@@ -28,6 +28,7 @@
 #include <ctype.h>
 #include <stdlib.h>
 #include <unistd.h>
+#include <glob.h>
 #include <syslog.h>
 #include <errno.h>
 #include <fcntl.h>
@@ -290,6 +291,35 @@ bool check_out(int solution_id, int result)
     return _check_out_mysql(solution_id, result);
 }
 
+static pid_t similarity_pid = 0;
+
+// Runs Dolos over a whole contest when the admin API leaves data/contests/<id>/similarity.request.
+void run_contest_similarity()
+{
+    if (similarity_pid > 0)
+        return; // previous run still working
+    glob_t requests;
+    bool pending = glob("data/contests/*/similarity.request", 0, NULL, &requests) == 0;
+    globfree(&requests);
+    if (!pending)
+        return;
+    similarity_pid = fork();
+    if (similarity_pid == 0)
+    {
+        execl("/usr/bin/contest_similarity.sh", "/usr/bin/contest_similarity.sh", oj_home, (char *)NULL);
+        exit(1);
+    }
+}
+
+// waitpid for judge clients: the contest similarity run is not one of them.
+pid_t wait_client(int options)
+{
+    pid_t pid;
+    while ((pid = waitpid(-1, NULL, options)) > 0 && pid == similarity_pid)
+        similarity_pid = 0;
+    return pid;
+}
+
 int work()
 {
     static int retcnt = 0;
@@ -311,7 +341,7 @@ int work()
             write_log("Judging solution %d", runid);
         if (workcnt >= max_running)
         {                                   // if no more client can running
-            tmp_pid = waitpid(-1, NULL, 0); // wait 4 one child exit
+            tmp_pid = wait_client(0); // wait 4 one child exit
             workcnt--;
             retcnt++;
             for (i = 0; i < max_running; i++) // get the client id
@@ -342,7 +372,7 @@ int work()
             ID[i] = 0;
         }
     }
-    while ((tmp_pid = waitpid(-1, NULL, WNOHANG)) > 0)
+    while ((tmp_pid = wait_client(WNOHANG)) > 0)
     {
         workcnt--;
         retcnt++;
@@ -445,6 +475,7 @@ int main(int argc, char **argv)
         {
             j = work();
         }
+        run_contest_similarity();
         sleep(sleep_time);
         j = 1;
     }
