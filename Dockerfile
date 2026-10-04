@@ -14,6 +14,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     flex \
     g++ \
     default-libmysqlclient-dev \
+    default-mysql-client \
     libmysql++-dev \
     dos2unix \
     libcurl4-openssl-dev \

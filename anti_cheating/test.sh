@@ -1,5 +1,5 @@
 #!/bin/bash
-# Self-check for anti_cheating.sh. Needs dolos in PATH: ./test.sh
+# Self-check for anti_cheating.sh and contest_similarity.sh. Needs dolos in PATH: ./test.sh
 set -euo pipefail
 
 script="$(cd "$(dirname "$0")" && pwd)/anti_cheating.sh"
@@ -35,4 +35,24 @@ check "100.cc,200.cc,1" 100 7 .cc 1000 "1001,"   # own resubmission ignored, cop
 check "0.xx,0.xx,0"     100 7 .cc 1000 "1001,200," # nobody else left to compare with
 check "0.xx,0.xx,0"     300 7 .cc 1000 ""        # original code, id 300 must not match by substring
 check "1001.cc,200.cc,1" 1001 7 .cc 1000 "100,"
+
+# Whole contest run, with mysql replaced by a stub that serves the accepted list and logs the writes.
+cp "$dir/100.cc" "$dir/400.cc" # no longer accepted: must be left out
+mkdir -p "$work/etc" "$work/bin"
+printf 'OJ_HOST_NAME=db\nOJ_USER_NAME=u\nOJ_PASSWORD=p\nOJ_DB_NAME=jol\nOJ_PORT_NUMBER=3306\n' > "$work/etc/judge.conf"
+printf '100\talice\t1000\n1001\talice\t1000\n200\tbob\t1000\n300\tcarol\t1000\n' > "$work/accepted.tsv"
+cat > "$work/bin/mysql" <<STUB
+#!/bin/bash
+query="\${@: -1}"
+case "\$query" in SELECT*) cat "$work/accepted.tsv" ;; *) echo "\$query" >> "$work/sql.log" ;; esac
+STUB
+chmod +x "$work/bin/mysql"
+touch "$work/data/contests/7/similarity.request"
+PATH="$work/bin:$PATH" "$(dirname "$script")/contest_similarity.sh" "$work"
+
+[ ! -e "$work/data/contests/7/similarity.request" ] || { echo "FAIL: request not removed"; exit 1; }
+grep -q '^DELETE sc FROM similar_code .*contest_id=7$' "$work/sql.log" || { echo "FAIL: previous rows not deleted"; exit 1; }
+actual=$(grep -o '([0-9,]*)' "$work/sql.log" | sort | tr '\n' ' ')
+expected="(100,200,100) (1001,200,100) (200,100,100) "
+[ "$actual" = "$expected" ] || { echo "FAIL contest run: expected '$expected', got '$actual'"; exit 1; }
 echo OK
