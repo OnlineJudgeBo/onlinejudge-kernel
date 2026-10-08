@@ -1,4 +1,5 @@
-// Self-check for scoring.h: g++ -std=c++17 -o scoring_test scoring_test.cc && ./scoring_test
+// Self-check for scoring.h:
+//   g++ -std=c++17 -I/usr/include/cjson -o scoring_test scoring_test.cc -lcjson && ./scoring_test
 #include "scoring.h"
 #include <cassert>
 #include <cmath>
@@ -7,14 +8,22 @@ static bool near(double a, double b) { return std::fabs(a - b) < 1e-9; }
 
 int main()
 {
-    const char *path = "scoring_test.txt";
+    const char *path = "scoring_test.json";
     FILE *file = fopen(path, "w");
-    fputs("# points type pattern\n10 s1_*\n20 sum s2_*\n30 min s3_*\n40 mul s4_*\n5 empty_*\nnot a group\n", file);
+    fputs("{\"groups\": ["
+          "{\"name\": \"uno\", \"points\": 10, \"tests\": \"s1_*\"},"
+          "{\"points\": 20, \"type\": \"sum\", \"tests\": [\"s2_[12]\", \"s2_[345]\"]},"
+          "{\"points\": 30, \"type\": \"min\", \"tests\": \"s3_*\"},"
+          "{\"points\": 40, \"type\": \"mul\", \"tests\": \"s4_*\"},"
+          "{\"points\": 5, \"tests\": \"empty_*\"},"
+          "{\"points\": \"x\", \"tests\": \"s1_*\"}, {\"points\": 7}]}",
+          file);
     fclose(file);
     std::vector<ScoreGroup> groups = read_score_groups(path);
     remove(path);
     assert(groups.size() == 5);
-    assert(groups[0].type == "sum" && groups[0].pattern == "s1_*");
+    assert(groups[0].type == "sum" && groups[0].patterns[0] == "s1_*" && groups[1].patterns.size() == 2);
+    assert(read_score_groups("missing.json").empty());
 
     std::vector<TestOutcome> tests = {
         {"sample", 1},

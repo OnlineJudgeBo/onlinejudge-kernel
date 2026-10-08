@@ -1484,9 +1484,16 @@ int special_judge(char *oj_home, int problem_id, char *infile, char *outfile, ch
     char source[BUFFER_SIZE], checker[BUFFER_SIZE];
     sprintf(source, "%s/data/%d/checker.cpp", oj_home, problem_id);
     sprintf(checker, "%s/data/%d/checker", oj_home, problem_id);
-    // Without checker.cpp the problem uses the legacy HUSTOJ binary data/<pid>/spj.
     bool testlib = access(source, R_OK) == 0;
-    if (testlib && !build_checker(source, checker, problem_id))
+    // checker_cms.cpp follows the CMS convention instead: it prints the outcome (0..1) to stdout.
+    bool cms = false;
+    if (!testlib)
+    {
+        sprintf(source, "%s/data/%d/checker_cms.cpp", oj_home, problem_id);
+        cms = access(source, R_OK) == 0;
+    }
+    // Without a checker source the problem uses the legacy HUSTOJ binary data/<pid>/spj.
+    if ((testlib || cms) && !build_checker(source, checker, problem_id))
         return SPJ_BROKEN;
     pid = fork();
     int ret = 0;
@@ -1520,6 +1527,12 @@ int special_judge(char *oj_home, int problem_id, char *infile, char *outfile, ch
             int code = WIFEXITED(ret) ? WEXITSTATUS(ret) : SPJ_BROKEN;
             exit(code == 7 ? SPJ_POINTS : code <= SPJ_PE ? code : SPJ_BROKEN);
         }
+        if (cms)
+        {
+            // CMS order: input, jury answer, participant output.
+            ret = execute_cmd("%s %s %s %s > checker.err 2> /dev/null", checker, infile, outfile, userfile);
+            exit(ret == 0 ? SPJ_POINTS : SPJ_BROKEN);
+        }
         ret = execute_cmd("%s/data/%d/spj %s %s %s", oj_home, problem_id, infile, outfile, userfile);
         if (DEBUG)
             printf("spj1=%d\n", ret);
@@ -1539,9 +1552,10 @@ int special_judge(char *oj_home, int problem_id, char *infile, char *outfile, ch
     }
     if (ret == SPJ_POINTS)
     {
-        // quitp(fraction, ...) writes "points <fraction> <message>" to stderr.
+        // testlib quitp(fraction, ...) writes "points <fraction> <message>" to stderr; a CMS
+        // checker prints just the fraction. Either way it was captured in checker.err.
         FILE *report = fopen("checker.err", "r");
-        if (report == NULL || fscanf(report, "points %lf", &checker_points) != 1)
+        if (report == NULL || fscanf(report, cms ? "%lf" : "points %lf", &checker_points) != 1)
             ret = SPJ_BROKEN;
         if (report != NULL)
             fclose(report);
@@ -2149,7 +2163,7 @@ int main(int argc, char **argv)
 
     // A problem with score groups, or a contest marked OBI, is judged on every test.
     char scoring_path[BUFFER_SIZE];
-    sprintf(scoring_path, "%s/data/%d/scoring.txt", oj_home, p_id);
+    sprintf(scoring_path, "%s/data/%d/scoring.json", oj_home, p_id);
     std::vector<ScoreGroup> groups;
     std::vector<TestOutcome> outcomes;
     if (p_id > 0)
