@@ -704,9 +704,37 @@ void umount(char *work_dir)
     execute_cmd("/bin/umount -f %s/log/etc/alternatives 2>/dev/null", work_dir);
 }
 
-int compile(int lang, char *work_dir)
+// A problem with data/<pid>/grader.cpp is solved by writing a function: the grader owns main()
+// and is compiled together with the submission. Returns false when the problem has no grader.
+bool problem_has_grader(int p_id)
+{
+    char grader[BUFFER_SIZE];
+    sprintf(grader, "%s/data/%d/grader.cpp", oj_home, p_id);
+    return p_id > 0 && access(grader, R_OK) == 0;
+}
+
+int compile(int lang, char *work_dir, int p_id)
 {
     int pid;
+    bool has_grader = problem_has_grader(p_id);
+    if (has_grader)
+    {
+        if (lang != 1 && lang != 14 && lang != 16)
+        {
+            // Graders exist for C++ only: say so instead of failing with a missing main().
+            FILE *ce = fopen("ce.txt", "w");
+            if (ce != NULL)
+            {
+                fprintf(ce, "Este problema se resuelve implementando una funcion y solo admite C++.\n");
+                fclose(ce);
+            }
+            return 1;
+        }
+        // The grader and the public headers the submission includes.
+        execute_cmd("/bin/cp %s/data/%d/grader.cpp .", oj_home, p_id);
+        execute_cmd("/bin/cp %s/data/%d/*.h . 2> /dev/null", oj_home, p_id);
+    }
+    const char *CP_GRADER[] = {"g++", "Main.cc", "grader.cpp", "-o", "Main", "-fno-asm", "-Wall", "-lm", "--static", "-std=c++17", "-DONLINE_JUDGE", NULL};
 
     const char *CP_C[] = {"gcc", "Main.c", "-o", "Main", "-fno-asm", "-Wall", "-lm", "--static", "-std=c++0x", "-DONLINE_JUDGE", NULL};
     const char *CP_X[] = {"g++", "Main.cc", "-o", "Main", "-fno-asm", "-Wall", "-lm", "--static", "-DONLINE_JUDGE", NULL};
@@ -781,6 +809,11 @@ int compile(int lang, char *work_dir)
         while (setresuid(1536, 1536, 1536) != 0)
             sleep(1);
         printf("lllllaaaaannnng");
+        if (has_grader)
+        {
+            execvp(CP_GRADER[0], (char *const *)CP_GRADER);
+            exit(1);
+        }
         switch (lang)
         {
         case 0:
@@ -846,6 +879,9 @@ int compile(int lang, char *work_dir)
     {
         int status = 0;
         waitpid(pid, &status, 0);
+        // The grader source is secret: the running submission must not find it in its work dir.
+        if (has_grader)
+            execute_cmd("/bin/rm -f grader.cpp");
         if (lang > 3 && lang < 7)
             status = get_file_size("ce.txt");
         if (DEBUG)
@@ -2190,7 +2226,7 @@ int main(int argc, char **argv)
 
     int Compile_OK;
 
-    Compile_OK = compile(lang, work_dir);
+    Compile_OK = compile(lang, work_dir, p_id);
     if (Compile_OK != 0)
     {
         addceinfo(solution_id);
