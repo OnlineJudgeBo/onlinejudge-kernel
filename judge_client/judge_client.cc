@@ -968,7 +968,8 @@ void _get_problem_info_mysql(int p_id, int &time_lmt, int &mem_lmt, int &isspj)
     row = mysql_fetch_row(res);
     time_lmt = atoi(row[0]);
     mem_lmt = atoi(row[1]);
-    isspj = (row[2][0] == '1');
+    // The admin API stores Y/N, HUSTOJ stored 1/0.
+    isspj = (row[2][0] == '1' || row[2][0] == 'Y');
     mysql_free_result(res);
 }
 
@@ -1446,10 +1447,36 @@ int fix_java_mis_judge(char *work_dir, int &ACflg, int &topmemory, int mem_lmt)
     return comp_res;
 }
 
+// special_judge results besides 0 (accepted) and 1 (wrong answer).
+#define SPJ_PE 2      // testlib _pe
+#define SPJ_BROKEN 3  // the checker did not compile, crashed or reported _fail
+
+// A problem with data/<pid>/checker.cpp is judged by that testlib checker, compiled on first
+// use and again whenever the source changes. Returns false when the binary could not be built;
+// the compiler output stays in data/<pid>/checker.log.
+bool build_checker(const char *source, const char *checker, int problem_id)
+{
+    struct stat source_stat, checker_stat;
+    if (stat(source, &source_stat) != 0)
+        return false;
+    if (stat(checker, &checker_stat) == 0 && checker_stat.st_mtime >= source_stat.st_mtime)
+        return true;
+    // Built under a private name and renamed, so a concurrent judge client never runs a half-written binary.
+    return execute_cmd("timeout 120 g++ -O2 -std=c++17 -o %s.%d %s 2> %s/data/%d/checker.log && chmod 755 %s.%d && mv -f %s.%d %s",
+                       checker, getpid(), source, oj_home, problem_id, checker, getpid(), checker, getpid(), checker) == 0;
+}
+
 int special_judge(char *oj_home, int problem_id, char *infile, char *outfile, char *userfile)
 {
     pid_t pid;
     printf("pid=%d\n", problem_id);
+    char source[BUFFER_SIZE], checker[BUFFER_SIZE];
+    sprintf(source, "%s/data/%d/checker.cpp", oj_home, problem_id);
+    sprintf(checker, "%s/data/%d/checker", oj_home, problem_id);
+    // Without checker.cpp the problem uses the legacy HUSTOJ binary data/<pid>/spj.
+    bool testlib = access(source, R_OK) == 0;
+    if (testlib && !build_checker(source, checker, problem_id))
+        return SPJ_BROKEN;
     pid = fork();
     int ret = 0;
     if (pid == 0)
@@ -1475,6 +1502,13 @@ int special_judge(char *oj_home, int problem_id, char *infile, char *outfile, ch
         LIM.rlim_cur = STD_F_LIM;
         setrlimit(RLIMIT_FSIZE, &LIM);
 
+        if (testlib)
+        {
+            // testlib order: input, participant output, jury answer. Exit 0 ok, 1 wa, 2 pe.
+            ret = execute_cmd("%s %s %s %s > /dev/null 2>&1", checker, infile, userfile, outfile);
+            int code = WIFEXITED(ret) ? WEXITSTATUS(ret) : SPJ_BROKEN;
+            exit(code <= SPJ_PE ? code : SPJ_BROKEN);
+        }
         ret = execute_cmd("%s/data/%d/spj %s %s %s", oj_home, problem_id, infile, outfile, userfile);
         if (DEBUG)
             printf("spj1=%d\n", ret);
@@ -1515,6 +1549,14 @@ void judge_solution(int &ACflg, int &usedtime, int time_lmt, int isspj,
 
             if (comp_res == 0)
                 comp_res = OJ_AC;
+            else if (comp_res == SPJ_PE)
+                comp_res = OJ_PE;
+            else if (comp_res == SPJ_BROKEN)
+            {
+                // Not the contestant's fault: report it instead of a wrong answer.
+                print_runtimeerror((char *)"El checker del problema no compila o fallo; revisar checker.log en los archivos del problema.");
+                comp_res = OJ_RE;
+            }
             else
             {
                 if (DEBUG)
