@@ -51,6 +51,7 @@
 #include "okcalls.h"
 #include <curl/curl.h>
 #include "cJSON.h"
+#include "scoring.h"
 
 typedef struct {
     int similar_s_id;
@@ -499,8 +500,14 @@ void _update_solution_mysql(int solution_id, int result, int time, int memory,
                 "UPDATE solution SET result=%d,time=%d,memory=%d WHERE solution_id=%d LIMIT 1%c",
                 result, time, memory, solution_id, 0);
     }
-    if (mysql_real_query(conn, sql, strlen(sql)))
+    if (mysql_real_query(conn, sql, strlen(sql)) && oi_mode)
     {
+        // pass_rate was decimal(2,2) before the group scoring migration and cannot hold 1.00:
+        // keep the verdict rather than leave the solution stuck in "running".
+        sprintf(sql,
+                "UPDATE solution SET result=%d,time=%d,memory=%d,pass_rate=LEAST(%f,0.99) WHERE solution_id=%d LIMIT 1%c",
+                result, time, memory, pass_rate, solution_id, 0);
+        mysql_real_query(conn, sql, strlen(sql));
     }
 
 
@@ -1450,6 +1457,10 @@ int fix_java_mis_judge(char *work_dir, int &ACflg, int &topmemory, int mem_lmt)
 // special_judge results besides 0 (accepted) and 1 (wrong answer).
 #define SPJ_PE 2      // testlib _pe
 #define SPJ_BROKEN 3  // the checker did not compile, crashed or reported _fail
+#define SPJ_POINTS 4  // testlib quitp: partial credit, fraction left in checker_points
+
+// Fraction (0..1) the checker gave to the last test through quitp; negative when it gave none.
+static double checker_points = -1;
 
 // A problem with data/<pid>/checker.cpp is judged by that testlib checker, compiled on first
 // use and again whenever the source changes. Returns false when the binary could not be built;
@@ -1504,10 +1515,10 @@ int special_judge(char *oj_home, int problem_id, char *infile, char *outfile, ch
 
         if (testlib)
         {
-            // testlib order: input, participant output, jury answer. Exit 0 ok, 1 wa, 2 pe.
-            ret = execute_cmd("%s %s %s %s > /dev/null 2>&1", checker, infile, userfile, outfile);
+            // testlib order: input, participant output, jury answer. Exit 0 ok, 1 wa, 2 pe, 7 points.
+            ret = execute_cmd("%s %s %s %s > /dev/null 2> checker.err", checker, infile, userfile, outfile);
             int code = WIFEXITED(ret) ? WEXITSTATUS(ret) : SPJ_BROKEN;
-            exit(code <= SPJ_PE ? code : SPJ_BROKEN);
+            exit(code == 7 ? SPJ_POINTS : code <= SPJ_PE ? code : SPJ_BROKEN);
         }
         ret = execute_cmd("%s/data/%d/spj %s %s %s", oj_home, problem_id, infile, outfile, userfile);
         if (DEBUG)
@@ -1525,6 +1536,16 @@ int special_judge(char *oj_home, int problem_id, char *infile, char *outfile, ch
         ret = WEXITSTATUS(status);
         if (DEBUG)
             printf("spj2=%d\n", ret);
+    }
+    if (ret == SPJ_POINTS)
+    {
+        // quitp(fraction, ...) writes "points <fraction> <message>" to stderr.
+        FILE *report = fopen("checker.err", "r");
+        if (report == NULL || fscanf(report, "points %lf", &checker_points) != 1)
+            ret = SPJ_BROKEN;
+        if (report != NULL)
+            fclose(report);
+        checker_points = checker_points < 0 ? 0 : checker_points > 1 ? 1 : checker_points;
     }
     return ret;
 }
@@ -1551,6 +1572,8 @@ void judge_solution(int &ACflg, int &usedtime, int time_lmt, int isspj,
                 comp_res = OJ_AC;
             else if (comp_res == SPJ_PE)
                 comp_res = OJ_PE;
+            else if (comp_res == SPJ_POINTS)
+                comp_res = checker_points >= 1 ? OJ_AC : OJ_WA;
             else if (comp_res == SPJ_BROKEN)
             {
                 // Not the contestant's fault: report it instead of a wrong answer.
@@ -1890,6 +1913,39 @@ Similar_Code get_similar_code(int solution_id, int lang, int p_id, int contest_i
     return similar;
 }
 
+bool contest_is_obi(int contest_id)
+{
+    if (contest_id <= 0)
+        return false;
+    char sql[BUFFER_SIZE];
+    sprintf(sql, "SELECT obi FROM contest WHERE contest_id=%d", contest_id);
+    if (mysql_real_query(conn, sql, strlen(sql)))
+        return false;
+    MYSQL_RES *res = mysql_store_result(conn);
+    if (res == NULL)
+        return false;
+    MYSQL_ROW row = mysql_fetch_row(res);
+    bool obi = row != NULL && row[0] != NULL && atoi(row[0]) == 1;
+    mysql_free_result(res);
+    return obi;
+}
+
+// Points per group of one solution, for the per-subtask feedback and the ranking. Failures are
+// ignored: a judge whose database has no solution_subtask table yet must keep judging.
+void save_group_scores(int solution_id, const std::vector<ScoreGroup> &groups)
+{
+    char sql[BUFFER_SIZE];
+    sprintf(sql, "DELETE FROM solution_subtask WHERE solution_id=%d", solution_id);
+    if (mysql_real_query(conn, sql, strlen(sql)))
+        return;
+    for (size_t i = 0; i < groups.size(); i++)
+    {
+        sprintf(sql, "INSERT INTO solution_subtask (solution_id, subtask, points, max_points, tests) VALUES (%d, %d, %f, %f, %d)",
+                solution_id, (int)i + 1, groups[i].earned, groups[i].points, groups[i].tests);
+        mysql_real_query(conn, sql, strlen(sql));
+    }
+}
+
 void mk_shm_workdir(char *work_dir)
 {
     char shm_path[BUFFER_SIZE];
@@ -2090,6 +2146,16 @@ int main(int argc, char **argv)
     {
         get_problem_info(p_id, time_lmt, mem_lmt, isspj);
     }
+
+    // A problem with score groups, or a contest marked OBI, is judged on every test.
+    char scoring_path[BUFFER_SIZE];
+    sprintf(scoring_path, "%s/data/%d/scoring.txt", oj_home, p_id);
+    std::vector<ScoreGroup> groups;
+    std::vector<TestOutcome> outcomes;
+    if (p_id > 0)
+        groups = read_score_groups(scoring_path);
+    if (!groups.empty() || contest_is_obi(contest_id))
+        oi_mode = 1;
     printf("solution_id=%d, work_dir=%s, lang=%d\n", solution_id, work_dir, lang);
 
     get_solution(solution_id, work_dir, lang);
@@ -2290,6 +2356,7 @@ int main(int argc, char **argv)
         else
         {
             num_of_test++;
+            checker_points = -1;
             watch_solution(pidApp, infile, ACflg, isspj, userfile, outfile,
                            solution_id, lang, topmemory, mem_lmt, usedtime, time_lmt,
                            p_id, PEflg, work_dir);
@@ -2305,6 +2372,9 @@ int main(int argc, char **argv)
         }
         if (oi_mode)
         {
+            // Whitespace-only differences (PE) still earn the test, as in CMS white-diff.
+            double outcome = (ACflg == OJ_AC || ACflg == OJ_PE) ? 1 : checker_points > 0 ? checker_points : 0;
+            outcomes.push_back({std::string(dirp->d_name, namelen), outcome});
             if (ACflg == OJ_AC)
             {
                 ++pass_rate;
@@ -2359,6 +2429,18 @@ int main(int argc, char **argv)
     {
         if (num_of_test > 0)
             pass_rate /= num_of_test;
+        if (!groups.empty())
+        {
+            double earned = 0, total = 0;
+            score_groups(groups, outcomes);
+            for (const ScoreGroup &group : groups)
+            {
+                earned += group.earned;
+                total += group.points;
+            }
+            pass_rate = total > 0 ? earned / total : 0;
+            save_group_scores(solution_id, groups);
+        }
         update_solution(solution_id, finalACflg, usedtime, topmemory >> 10, sim, sim_s_id, pass_rate);
     }
     else
