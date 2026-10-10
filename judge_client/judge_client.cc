@@ -1011,7 +1011,7 @@ void _get_problem_info_mysql(int p_id, int &time_lmt, int &mem_lmt, int &isspj)
     row = mysql_fetch_row(res);
     time_lmt = atoi(row[0]);
     mem_lmt = atoi(row[1]);
-    // The admin API stores Y/N, HUSTOJ stored 1/0.
+    // The admin API stores Y/N; older rows hold 1/0.
     isspj = (row[2][0] == '1' || row[2][0] == 'Y');
     mysql_free_result(res);
 }
@@ -1528,7 +1528,7 @@ int special_judge(char *oj_home, int problem_id, char *infile, char *outfile, ch
         sprintf(source, "%s/data/%d/checker_cms.cpp", oj_home, problem_id);
         cms = access(source, R_OK) == 0;
     }
-    // Without a checker source the problem uses the legacy HUSTOJ binary data/<pid>/spj.
+    // Without a checker source the problem uses the legacy binary data/<pid>/spj.
     if ((testlib || cms) && !build_checker(source, checker, problem_id))
         return SPJ_BROKEN;
     pid = fork();
