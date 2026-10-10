@@ -51,6 +51,7 @@
 #include "okcalls.h"
 #include <curl/curl.h>
 #include "cJSON.h"
+#include "scoring.h"
 
 typedef struct {
     int similar_s_id;
@@ -499,8 +500,14 @@ void _update_solution_mysql(int solution_id, int result, int time, int memory,
                 "UPDATE solution SET result=%d,time=%d,memory=%d WHERE solution_id=%d LIMIT 1%c",
                 result, time, memory, solution_id, 0);
     }
-    if (mysql_real_query(conn, sql, strlen(sql)))
+    if (mysql_real_query(conn, sql, strlen(sql)) && oi_mode)
     {
+        // pass_rate was decimal(2,2) before the group scoring migration and cannot hold 1.00:
+        // keep the verdict rather than leave the solution stuck in "running".
+        sprintf(sql,
+                "UPDATE solution SET result=%d,time=%d,memory=%d,pass_rate=LEAST(%f,0.99) WHERE solution_id=%d LIMIT 1%c",
+                result, time, memory, pass_rate, solution_id, 0);
+        mysql_real_query(conn, sql, strlen(sql));
     }
 
 
@@ -697,9 +704,37 @@ void umount(char *work_dir)
     execute_cmd("/bin/umount -f %s/log/etc/alternatives 2>/dev/null", work_dir);
 }
 
-int compile(int lang, char *work_dir)
+// A problem with data/<pid>/grader.cpp is solved by writing a function: the grader owns main()
+// and is compiled together with the submission. Returns false when the problem has no grader.
+bool problem_has_grader(int p_id)
+{
+    char grader[BUFFER_SIZE];
+    sprintf(grader, "%s/data/%d/grader.cpp", oj_home, p_id);
+    return p_id > 0 && access(grader, R_OK) == 0;
+}
+
+int compile(int lang, char *work_dir, int p_id)
 {
     int pid;
+    bool has_grader = problem_has_grader(p_id);
+    if (has_grader)
+    {
+        if (lang != 1 && lang != 14 && lang != 16)
+        {
+            // Graders exist for C++ only: say so instead of failing with a missing main().
+            FILE *ce = fopen("ce.txt", "w");
+            if (ce != NULL)
+            {
+                fprintf(ce, "Este problema se resuelve implementando una funcion y solo admite C++.\n");
+                fclose(ce);
+            }
+            return 1;
+        }
+        // The grader and the public headers the submission includes.
+        execute_cmd("/bin/cp %s/data/%d/grader.cpp .", oj_home, p_id);
+        execute_cmd("/bin/cp %s/data/%d/*.h . 2> /dev/null", oj_home, p_id);
+    }
+    const char *CP_GRADER[] = {"g++", "Main.cc", "grader.cpp", "-o", "Main", "-fno-asm", "-Wall", "-lm", "--static", "-std=c++17", "-DONLINE_JUDGE", NULL};
 
     const char *CP_C[] = {"gcc", "Main.c", "-o", "Main", "-fno-asm", "-Wall", "-lm", "--static", "-std=c++0x", "-DONLINE_JUDGE", NULL};
     const char *CP_X[] = {"g++", "Main.cc", "-o", "Main", "-fno-asm", "-Wall", "-lm", "--static", "-DONLINE_JUDGE", NULL};
@@ -774,6 +809,11 @@ int compile(int lang, char *work_dir)
         while (setresuid(1536, 1536, 1536) != 0)
             sleep(1);
         printf("lllllaaaaannnng");
+        if (has_grader)
+        {
+            execvp(CP_GRADER[0], (char *const *)CP_GRADER);
+            exit(1);
+        }
         switch (lang)
         {
         case 0:
@@ -839,6 +879,9 @@ int compile(int lang, char *work_dir)
     {
         int status = 0;
         waitpid(pid, &status, 0);
+        // The grader source is secret: the running submission must not find it in its work dir.
+        if (has_grader)
+            execute_cmd("/bin/rm -f grader.cpp");
         if (lang > 3 && lang < 7)
             status = get_file_size("ce.txt");
         if (DEBUG)
@@ -968,7 +1011,8 @@ void _get_problem_info_mysql(int p_id, int &time_lmt, int &mem_lmt, int &isspj)
     row = mysql_fetch_row(res);
     time_lmt = atoi(row[0]);
     mem_lmt = atoi(row[1]);
-    isspj = (row[2][0] == '1');
+    // The admin API stores Y/N; older rows hold 1/0.
+    isspj = (row[2][0] == '1' || row[2][0] == 'Y');
     mysql_free_result(res);
 }
 
@@ -1446,10 +1490,47 @@ int fix_java_mis_judge(char *work_dir, int &ACflg, int &topmemory, int mem_lmt)
     return comp_res;
 }
 
+// special_judge results besides 0 (accepted) and 1 (wrong answer).
+#define SPJ_PE 2      // testlib _pe
+#define SPJ_BROKEN 3  // the checker did not compile, crashed or reported _fail
+#define SPJ_POINTS 4  // testlib quitp: partial credit, fraction left in checker_points
+
+// Fraction (0..1) the checker gave to the last test through quitp; negative when it gave none.
+static double checker_points = -1;
+
+// A problem with data/<pid>/checker.cpp is judged by that testlib checker, compiled on first
+// use and again whenever the source changes. Returns false when the binary could not be built;
+// the compiler output stays in data/<pid>/checker.log.
+bool build_checker(const char *source, const char *checker, int problem_id)
+{
+    struct stat source_stat, checker_stat;
+    if (stat(source, &source_stat) != 0)
+        return false;
+    if (stat(checker, &checker_stat) == 0 && checker_stat.st_mtime >= source_stat.st_mtime)
+        return true;
+    // Built under a private name and renamed, so a concurrent judge client never runs a half-written binary.
+    return execute_cmd("timeout 120 g++ -O2 -std=c++17 -o %s.%d %s 2> %s/data/%d/checker.log && chmod 755 %s.%d && mv -f %s.%d %s",
+                       checker, getpid(), source, oj_home, problem_id, checker, getpid(), checker, getpid(), checker) == 0;
+}
+
 int special_judge(char *oj_home, int problem_id, char *infile, char *outfile, char *userfile)
 {
     pid_t pid;
     printf("pid=%d\n", problem_id);
+    char source[BUFFER_SIZE], checker[BUFFER_SIZE];
+    sprintf(source, "%s/data/%d/checker.cpp", oj_home, problem_id);
+    sprintf(checker, "%s/data/%d/checker", oj_home, problem_id);
+    bool testlib = access(source, R_OK) == 0;
+    // checker_cms.cpp follows the CMS convention instead: it prints the outcome (0..1) to stdout.
+    bool cms = false;
+    if (!testlib)
+    {
+        sprintf(source, "%s/data/%d/checker_cms.cpp", oj_home, problem_id);
+        cms = access(source, R_OK) == 0;
+    }
+    // Without a checker source the problem uses the legacy binary data/<pid>/spj.
+    if ((testlib || cms) && !build_checker(source, checker, problem_id))
+        return SPJ_BROKEN;
     pid = fork();
     int ret = 0;
     if (pid == 0)
@@ -1475,6 +1556,19 @@ int special_judge(char *oj_home, int problem_id, char *infile, char *outfile, ch
         LIM.rlim_cur = STD_F_LIM;
         setrlimit(RLIMIT_FSIZE, &LIM);
 
+        if (testlib)
+        {
+            // testlib order: input, participant output, jury answer. Exit 0 ok, 1 wa, 2 pe, 7 points.
+            ret = execute_cmd("%s %s %s %s > /dev/null 2> checker.err", checker, infile, userfile, outfile);
+            int code = WIFEXITED(ret) ? WEXITSTATUS(ret) : SPJ_BROKEN;
+            exit(code == 7 ? SPJ_POINTS : code <= SPJ_PE ? code : SPJ_BROKEN);
+        }
+        if (cms)
+        {
+            // CMS order: input, jury answer, participant output.
+            ret = execute_cmd("%s %s %s %s > checker.err 2> /dev/null", checker, infile, outfile, userfile);
+            exit(ret == 0 ? SPJ_POINTS : SPJ_BROKEN);
+        }
         ret = execute_cmd("%s/data/%d/spj %s %s %s", oj_home, problem_id, infile, outfile, userfile);
         if (DEBUG)
             printf("spj1=%d\n", ret);
@@ -1491,6 +1585,17 @@ int special_judge(char *oj_home, int problem_id, char *infile, char *outfile, ch
         ret = WEXITSTATUS(status);
         if (DEBUG)
             printf("spj2=%d\n", ret);
+    }
+    if (ret == SPJ_POINTS)
+    {
+        // testlib quitp(fraction, ...) writes "points <fraction> <message>" to stderr; a CMS
+        // checker prints just the fraction. Either way it was captured in checker.err.
+        FILE *report = fopen("checker.err", "r");
+        if (report == NULL || fscanf(report, cms ? "%lf" : "points %lf", &checker_points) != 1)
+            ret = SPJ_BROKEN;
+        if (report != NULL)
+            fclose(report);
+        checker_points = checker_points < 0 ? 0 : checker_points > 1 ? 1 : checker_points;
     }
     return ret;
 }
@@ -1515,6 +1620,16 @@ void judge_solution(int &ACflg, int &usedtime, int time_lmt, int isspj,
 
             if (comp_res == 0)
                 comp_res = OJ_AC;
+            else if (comp_res == SPJ_PE)
+                comp_res = OJ_PE;
+            else if (comp_res == SPJ_POINTS)
+                comp_res = checker_points >= 1 ? OJ_AC : OJ_WA;
+            else if (comp_res == SPJ_BROKEN)
+            {
+                // Not the contestant's fault: report it instead of a wrong answer.
+                print_runtimeerror((char *)"El checker del problema no compila o fallo; revisar checker.log en los archivos del problema.");
+                comp_res = OJ_RE;
+            }
             else
             {
                 if (DEBUG)
@@ -1848,6 +1963,39 @@ Similar_Code get_similar_code(int solution_id, int lang, int p_id, int contest_i
     return similar;
 }
 
+bool contest_is_obi(int contest_id)
+{
+    if (contest_id <= 0)
+        return false;
+    char sql[BUFFER_SIZE];
+    sprintf(sql, "SELECT obi FROM contest WHERE contest_id=%d", contest_id);
+    if (mysql_real_query(conn, sql, strlen(sql)))
+        return false;
+    MYSQL_RES *res = mysql_store_result(conn);
+    if (res == NULL)
+        return false;
+    MYSQL_ROW row = mysql_fetch_row(res);
+    bool obi = row != NULL && row[0] != NULL && atoi(row[0]) == 1;
+    mysql_free_result(res);
+    return obi;
+}
+
+// Points per group of one solution, for the per-subtask feedback and the ranking. Failures are
+// ignored: a judge whose database has no solution_subtask table yet must keep judging.
+void save_group_scores(int solution_id, const std::vector<ScoreGroup> &groups)
+{
+    char sql[BUFFER_SIZE];
+    sprintf(sql, "DELETE FROM solution_subtask WHERE solution_id=%d", solution_id);
+    if (mysql_real_query(conn, sql, strlen(sql)))
+        return;
+    for (size_t i = 0; i < groups.size(); i++)
+    {
+        sprintf(sql, "INSERT INTO solution_subtask (solution_id, subtask, points, max_points, tests) VALUES (%d, %d, %f, %f, %d)",
+                solution_id, (int)i + 1, groups[i].earned, groups[i].points, groups[i].tests);
+        mysql_real_query(conn, sql, strlen(sql));
+    }
+}
+
 void mk_shm_workdir(char *work_dir)
 {
     char shm_path[BUFFER_SIZE];
@@ -2048,6 +2196,16 @@ int main(int argc, char **argv)
     {
         get_problem_info(p_id, time_lmt, mem_lmt, isspj);
     }
+
+    // A problem with score groups, or a contest marked OBI, is judged on every test.
+    char scoring_path[BUFFER_SIZE];
+    sprintf(scoring_path, "%s/data/%d/scoring.json", oj_home, p_id);
+    std::vector<ScoreGroup> groups;
+    std::vector<TestOutcome> outcomes;
+    if (p_id > 0)
+        groups = read_score_groups(scoring_path);
+    if (!groups.empty() || contest_is_obi(contest_id))
+        oi_mode = 1;
     printf("solution_id=%d, work_dir=%s, lang=%d\n", solution_id, work_dir, lang);
 
     get_solution(solution_id, work_dir, lang);
@@ -2068,7 +2226,7 @@ int main(int argc, char **argv)
 
     int Compile_OK;
 
-    Compile_OK = compile(lang, work_dir);
+    Compile_OK = compile(lang, work_dir, p_id);
     if (Compile_OK != 0)
     {
         addceinfo(solution_id);
@@ -2248,6 +2406,7 @@ int main(int argc, char **argv)
         else
         {
             num_of_test++;
+            checker_points = -1;
             watch_solution(pidApp, infile, ACflg, isspj, userfile, outfile,
                            solution_id, lang, topmemory, mem_lmt, usedtime, time_lmt,
                            p_id, PEflg, work_dir);
@@ -2263,6 +2422,9 @@ int main(int argc, char **argv)
         }
         if (oi_mode)
         {
+            // Whitespace-only differences (PE) still earn the test, as in CMS white-diff.
+            double outcome = (ACflg == OJ_AC || ACflg == OJ_PE) ? 1 : checker_points > 0 ? checker_points : 0;
+            outcomes.push_back({std::string(dirp->d_name, namelen), outcome});
             if (ACflg == OJ_AC)
             {
                 ++pass_rate;
@@ -2317,6 +2479,18 @@ int main(int argc, char **argv)
     {
         if (num_of_test > 0)
             pass_rate /= num_of_test;
+        if (!groups.empty())
+        {
+            double earned = 0, total = 0;
+            score_groups(groups, outcomes);
+            for (const ScoreGroup &group : groups)
+            {
+                earned += group.earned;
+                total += group.points;
+            }
+            pass_rate = total > 0 ? earned / total : 0;
+            save_group_scores(solution_id, groups);
+        }
         update_solution(solution_id, finalACflg, usedtime, topmemory >> 10, sim, sim_s_id, pass_rate);
     }
     else

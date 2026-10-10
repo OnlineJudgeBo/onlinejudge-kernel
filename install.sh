@@ -3,6 +3,9 @@ chmod +x pseint/pseint pseint/psexport
 cp -f pseint/pseint /usr/bin/pseint
 cp -f pseint/psexport /usr/bin/psexport
 
+# testlib.h for problem checkers (data/<pid>/checker.cpp).
+cp -f ./judge_client/testlib/testlib.h /usr/include/testlib.h
+
 cp -f ./anti_cheating/anti_cheating.sh /usr/bin/anti_cheating.sh
 cp -f ./anti_cheating/contest_similarity.sh /usr/bin/contest_similarity.sh
 chmod +x /usr/bin/anti_cheating.sh /usr/bin/contest_similarity.sh
