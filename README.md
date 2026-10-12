@@ -2,6 +2,12 @@
 
 Judge, Judge_client and sim kernel of Patito Judge
 
+# Notice
+The new Kernel is: 
+
+https://github.com/OnlineJudgeBo/patito-sandbox-kernel
+
+
 ## Languages supports
 
 - Java
