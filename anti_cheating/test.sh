@@ -55,4 +55,12 @@ grep -q '^DELETE sc FROM similar_code .*contest_id=7$' "$work/sql.log" || { echo
 actual=$(grep -o '([0-9,]*)' "$work/sql.log" | sort | tr '\n' ' ')
 expected="(100,200,100) (1001,200,100) (200,100,100) "
 [ "$actual" = "$expected" ] || { echo "FAIL contest run: expected '$expected', got '$actual'"; exit 1; }
+[ ! -e "$work/data/contests/7/similarity.error" ] || { echo "FAIL: clean run left an error"; exit 1; }
+
+# A Dolos that crashes must leave similarity.error for the admin panel.
+printf '#!/bin/bash\nexit 1\n' > "$work/bin/dolos"
+chmod +x "$work/bin/dolos"
+touch "$work/data/contests/7/similarity.request"
+PATH="$work/bin:$PATH" "$(dirname "$script")/contest_similarity.sh" "$work" 2> /dev/null
+grep -q 'Dolos falló en el problema 1000 (.cc)' "$work/data/contests/7/similarity.error" || { echo "FAIL: dolos error not recorded"; exit 1; }
 echo OK
