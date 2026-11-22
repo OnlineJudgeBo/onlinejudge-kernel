@@ -701,7 +701,7 @@ int compile(int lang, char *work_dir)
 {
     int pid;
 
-    const char *CP_C[] = {"gcc", "Main.c", "-o", "Main", "-fno-asm", "-Wall", "-lm", "--static", "-std=c++0x", "-DONLINE_JUDGE", NULL};
+    const char *CP_C[] = {"gcc", "Main.c", "-o", "Main", "-fno-asm", "-Wall", "-lm", "--static", "-std=gnu11", "-DONLINE_JUDGE", NULL};
     const char *CP_X[] = {"g++", "Main.cc", "-o", "Main", "-fno-asm", "-Wall", "-lm", "--static", "-DONLINE_JUDGE", NULL};
     const char *CP_R[] = {"ruby", "-c", "Main.rb", NULL};
     const char *CP_B[] = {"chmod", "+rx", "Main.sh", NULL};
@@ -712,7 +712,7 @@ int compile(int lang, char *work_dir)
     const char *CP_BS[] = {"fbc", "Main.bas", NULL};
     const char *CP_CLANG[] = {"clang", "Main.c", "-o", "Main", "-fno-asm", "-Wall", "-lm", "--static", "-std=c99", "-DONLINE_JUDGE", NULL};
     const char *CP_CLANG_CPP[] = {"clang++", "Main.cc", "-o", "Main", "-fno-asm", "-Wall", "-lm", "--static", "-std=c++0x", "-DONLINE_JUDGE", NULL};
-    const char *CP_X11[] = {"g++", "Main.cc", "-o", "Main", "-fno-asm", "-Wall", "-lm", "--static", "-std=c++11", "-DONLINE_JUDGE", NULL};
+    const char *CP_X11[] = {"g++", "Main.cc", "-o", "Main", "-fno-asm", "-Wall", "-lm", "--static", "-std=c++17", "-DONLINE_JUDGE", NULL};
     const char *CP_GO[] = {"go", "build", "-o", "Main", "Main.go", NULL};
     const char *CP_PY[] = {"/usr/bin/python3.7", "-m", "pyflakes", "Main.py", NULL};
     const char *CP_PY12[] = {"/usr/bin/python3.12", "-c", "import py_compile; py_compile.compile(r'Main.py')", NULL};
